@@ -17,15 +17,19 @@ def commonvars():
 
     # DispaSET technologies:
     commons['Technologies'] = ['COMC', 'GTUR', 'HDAM', 'HROR', 'HPHS', 'ICEN', 'PHOT', 'STUR', 'WTOF', 'WTON', 'CAES', 'BATS',
-                    'BEVS', 'THMS', 'P2GS']
+                    'BEVS', 'THMS', 'P2GS','HP','GEO','STH','BOIL']
     # List of renewable technologies:
     commons['tech_renewables'] = ['WTON', 'WTOF', 'PHOT', 'HROR']
     # List of storage technologies:
     commons['tech_storage'] = ['HDAM', 'HPHS', 'BATS', 'BEVS', 'CAES', 'THMS']
+    ############
     # List of CHP types:
-    commons['types_CHP'] = ['extraction','back-pressure', 'p2h']
+    commons['types_CHP'] = ['extraction','back-pressure']
+    # List of heat generation:
+    commons['types_HEAT'] = ['chp','hp','geo','solarth','biomass']
+    #############
     # DispaSET fuels:
-    commons['Fuels'] = ['BIO', 'GAS', 'HRD', 'LIG', 'NUC', 'OIL', 'PEA', 'SUN', 'WAT', 'WIN', 'WST', 'OTH']
+    commons['Fuels'] = ['BIO', 'GAS', 'HRD', 'LIG', 'NUC', 'OIL', 'PEA', 'SUN', 'WAT', 'WIN', 'WST', 'OTH','ELEC','Geothermal','SUN']
     # Ordered list of fuels for plotting (the first ones are negative):
     commons['MeritOrder'] = ['Storage','FlowOut','NUC', 'LIG', 'HRD', 'BIO', 'GAS', 'OIL', 'PEA', 'WST', 'SUN', 'WIN', 'FlowIn', 'WAT']
     # Colors associated with each fuel:

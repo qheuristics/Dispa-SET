@@ -224,7 +224,7 @@ def clustering(plants, method='Standard', Nslices=20, PartLoadMax=0.1, Pmax=30):
     #    for i in range(len(plants.columns)):
     #        if plants.columns[i] != 'Unit' and plants.dtypes[i] == np.dtype('O'):
     #            string_keys.append(plants.columns[i])
-    string_keys = ['Zone', 'Technology', 'Fuel','CHPType']
+    string_keys = ['Zone', 'Technology', 'Fuel','CHPType','HEATType']
     # First, fill nan values:
     for key in string_keys:
         plants[key].fillna('',inplace=True)
@@ -245,7 +245,7 @@ def clustering(plants, method='Standard', Nslices=20, PartLoadMax=0.1, Pmax=30):
                 P_add = plants['PowerCapacity'][i]  # Additional power to be added
                 for key in plants_merged:
                     if key in ['RampUpRate', 'RampDownRate', 'MinUpTime', 'MinDownTime', 'NoLoadCost', 'Efficiency',
-                               'MinEfficiency', 'STOChargingEfficiency', 'CO2Intensity', 'STOSelfDischarge','CHPPowerToHeat','CHPPowerLossFactor']:
+                               'MinEfficiency', 'STOChargingEfficiency', 'CO2Intensity', 'STOSelfDischarge','CHPPowerToHeat','CHPPowerLossFactor','Tmin','Tmax']:
                         # Do a weighted average:
                         plants_merged.loc[j, key] = (plants_merged[key][j] * P_old + plants[key][i] * P_add) / (
                         P_add + P_old)

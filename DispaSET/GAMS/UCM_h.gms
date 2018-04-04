@@ -42,6 +42,8 @@ $set PrintResults 0
 *$set InputFileName Input.gdx
 $set InputFileName Inputs.gdx
 
+$set InputFileName_heat Inputs_heat.gdx
+
 * Definition of the equations that will be present in LP or MIP
 * (1 for LP 0 for MIP TC)
 $setglobal LPFormulation 0
@@ -53,6 +55,7 @@ $setglobal RetrieveStatus 0
 *Definition of   sets and parameters
 *===============================================================================
 SETS
+
 mk               Markets
 n                Nodes
 l                Lines
@@ -66,6 +69,9 @@ chp(u)           CHP units
 h                Hours
 i(h)             Subset of simulated hours for one iteration
 z(h)             Subset of all simulated hours
+************************************Modification********************************
+heat_gen(u)          Heat generation units
+********************************************************************************
 ;
 
 Alias(mk,mkmk);
@@ -82,6 +88,13 @@ Alias(i,ii);
 *Parameters as defined in the input file
 * \u indicate that the value is provided for one single unit
 PARAMETERS
+
+************************************Modification********************************
+DHDemand(h)                      [MWh\u]  Heat demand profile for chp units
+PHDemand(h)                      [MWh\u]  Heat demand profile for chp units
+HEATType
+COP(u,h)                         []      COP
+********************************************************************************
 AvailabilityFactor(u,h)          [%]      Availability factor
 CHPPowerLossFactor(u)            [%]      Power loss when generating heat
 CHPPowerToHeat(u)                [%]      Nominal power-to-heat factor
@@ -230,6 +243,23 @@ $If %RetrieveStatus% == 1 $LOAD CommittedCalc
 ;
 
 
+************************************Modification********************************
+*===============================================================================
+*Data import
+*===============================================================================
+
+$gdxin %inputfilename_heat%
+
+$LOAD heat_gen
+
+$LOAD DHDemand
+$LOAD PHDemand
+*$LOAD COP
+;
+********************************************************************************
+
+
+
 $If %Verbose% == 0 $goto skipdisplay
 
 Display
@@ -333,7 +363,7 @@ SystemCost(h)              [EUR]   Hourly system cost
 Reserve_2U(u,h)            [MW]    Spinning reserve up
 Reserve_2D(u,h)            [MW]    Spinning reserve down
 Reserve_3U(u,h)            [MW]    Non spinning quick start reserve up
-Heat(chp,h)                [MW]    Heat output by chp plant
+Heat2(chp,h)                [MW]    Heat output by chp plant
 HeatSlack(chp,h)           [MW]    Heat satisfied by other sources
 ;
 
@@ -438,8 +468,8 @@ EQ_SystemCost(i)..
          +sum(u,CostVariable(u,i) * Power(u,i))
          +sum(l,PriceTransmission(l,i)*Flow(l,i))
          +sum(n,CostLoadShedding(n,i)*ShedLoad(n,i))
-         +sum(chp, CostHeatSlack(chp,i) * HeatSlack(chp,i))
-         +sum(chp, CostVariable(chp,i) * CHPPowerLossFactor(chp) * Heat(chp,i))
+*         +sum(chp, CostHeatSlack(chp,i) * HeatSlack(chp,i))
+         +sum(chp, CostVariable(chp,i) * CHPPowerLossFactor(chp) * Heat2(chp,i))
          +100E3*(sum(n,LL_MaxPower(n,i)+LL_MinPower(n,i)))
          +80E3*(sum(n,LL_2U(n,i)+LL_2D(n,i)+LL_3U(n,i)))
          +70E3*sum(u,LL_RampUp(u,i)+LL_RampDown(u,i))
@@ -711,7 +741,8 @@ EQ_CHP_max_heat(chp,i)..
 ;
 
 EQ_CHP_demand_satisfaction(chp,i)..
-         Heat(chp,i) + HeatSlack(chp,i)
+         Heat2(chp,i)
+*         + HeatSlack(chp,i)
          =E=
          HeatDemand(chp,i)
 ;
@@ -723,7 +754,7 @@ EQ_Heat_Storage_balance(chp,i)..
          +StorageInput(chp,i)
          =E=
          StorageLevel(chp,i)
-         +Heat(chp,i) + StorageSelfDischarge(chp) * StorageLevel(chp,i)/24
+         +Heat2(chp,i) + StorageSelfDischarge(chp) * StorageLevel(chp,i)/24
 ;
 * The self-discharge proportional to the charging level is a bold hypothesis, but it avoids keeping self-discharging if the level reaches zero
 
@@ -892,14 +923,14 @@ LostLoad_RampUp(n,h)
 LostLoad_RampDown(n,h)
 OutputGenMargin(n,h)
 OutputHeat(chp,h)
-OutputHeatSlack(chp,h)
+*OutputHeatSlack(chp,h)
 ;
 
 OutputCommitted(u,z)=Committed.L(u,z);
 OutputFlow(l,z)=Flow.L(l,z);
 OutputPower(u,z)=Power.L(u,z);
-OutputHeat(chp,z)=Heat.L(chp,z);
-OutputHeatSlack(chp,z)=HeatSlack.L(chp,z);
+OutputHeat(chp,z)=Heat2.L(chp,z);
+*OutputHeatSlack(chp,z)=HeatSlack.L(chp,z);
 OutputStorageInput(s,z)=StorageInput.L(s,z);
 OutputStorageInput(chp,z)=StorageInput.L(chp,z);
 OutputStorageLevel(s,z)=StorageLevel.L(s,z);
@@ -922,7 +953,7 @@ OutputCommitted,
 OutputFlow,
 OutputPower,
 OutputHeat,
-OutputHeatSlack,
+*OutputHeatSlack,
 OutputStorageInput,
 OutputStorageLevel,
 OutputSystemCost,

@@ -535,9 +535,16 @@ def load_config_excel(ConfigFile):
     config['modifiers']['Wind'] = sheet.cell_value(112, 2)
     config['modifiers']['Solar'] = sheet.cell_value(113, 2)
     config['modifiers']['Storage'] = sheet.cell_value(114, 2)
+    
+    config['DistrictHeating'] = {}
+    config['DistrictHeating']['PartDH'] = sheet.cell_value(160, 2)
+    config['DistrictHeating']['DemandModifier'] = sheet.cell_value(161, 2)
+    config['DistrictHeating']['HeatLoss'] = sheet.cell_value(162, 2)
+    config['DistrictHeating']['T_out'] = sheet.cell_value(163, 2)
+
 
     # Read the technologies participating to reserve markets:
-    config['ReserveParticipation'] = read_truefalse(sheet, 131, 1, 145, 3)
+    config['ReserveParticipation'] = read_truefalse(sheet, 142, 1, 155, 3)
 
     logging.info("Using config file " + ConfigFile + " to build the simulation environment")
 
