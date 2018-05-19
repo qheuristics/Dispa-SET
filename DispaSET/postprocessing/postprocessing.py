@@ -148,6 +148,19 @@ def filter_by_country(PowerOutput, inputs, c):
     Power = PowerOutput.loc[:, [u for u in PowerOutput.columns if loc[u] == c]]
     return Power
 
+def filter_by_countryDH(DHOutput, inputs, c):
+    """
+    This function filters the dispaset Output Power dataframe by country
+
+    :param PowerOutput:     Dataframe of power generationwith units as columns and time as index
+    :param Inputs:          Dispaset inputs version 2.1.1
+    :param c:               Selected country (e.g. 'BE')
+    :returns Power:          Dataframe with power generation by country
+    """
+    loc = inputs['DHunits']['Zone']
+    Power = DHOutput.loc[:, [u for u in DHOutput.columns if loc[u] == c]]
+    return Power
+
 
 def get_plot_data(inputs, results, c):
     """
@@ -171,13 +184,13 @@ def get_plot_data(inputs, results, c):
 
     plotdata['FlowIn'] = 0
     plotdata['FlowOut'] = 0
+#    print(results['OutputFlow'])
     for col in results['OutputFlow']:
         if col[-2:] == c:
             plotdata['FlowIn'] = plotdata['FlowIn'] + results['OutputFlow'][col]
     for col in results['OutputFlow']:
         if col[:2] == c:
-            plotdata['FlowOut'] = plotdata['FlowOut'] - results['OutputFlow'][col]
-
+            plotdata['FlowOut'] = plotdata['FlowOut'] + results['OutputFlow'][col]
     # re-ordering columns:
     OrderedColumns = [col for col in commons['MeritOrder'] if col in plotdata.columns]
     plotdata = plotdata[OrderedColumns]
@@ -223,7 +236,7 @@ def plot_dispatch_safe(demand, plotdata, level=None, curtailment=None, rng=None)
     # Netting the interconnections:
     if 'FlowIn' in plotdata and 'FlowOut' in plotdata:
         plotdata['FlowIn'],plotdata['FlowOut'] = (np.maximum(0,plotdata['FlowIn']-plotdata['FlowOut']),np.maximum(0,plotdata['FlowOut']-plotdata['FlowIn']))
-      
+     
     # find the zero line position:
     cols = plotdata.columns.tolist()
     idx_zero = 0
@@ -302,7 +315,7 @@ def plot_dispatch_safe(demand, plotdata, level=None, curtailment=None, rng=None)
         ax2.yaxis.set_label_position("right")
         ax2.set_ylabel('Level [MWh]')
         ax2.yaxis.label.set_fontsize(16)
-        line_SOC = mlines.Line2D([], [], color='black', alpha=0.3, label='Reservoir', linestyle='--')
+        line_SOC = mlines.Line2D([], [], color='black', alpha=0.3, label='Heat Reservoir', linestyle='--')
 
     plt.xticks(rotation=45)
     line_demand = mlines.Line2D([], [], color='black', label='Load')
@@ -312,7 +325,7 @@ def plot_dispatch_safe(demand, plotdata, level=None, curtailment=None, rng=None)
     else:
         plt.legend(title='Dispatch for ' + demand.name[1], handles=[line_demand] + [line_SOC] + patches[::-1], loc=4)
 
-def plot_dispatch(demand, plotdata, level=None, curtailment=None, rng=None):
+def plot_dispatch(demand,demandh, plotdata, level=None, curtailment=None, rng=None):
     """
     Function that plots the dispatch data and the reservoir level as a cumulative sum
     
@@ -340,8 +353,9 @@ def plot_dispatch(demand, plotdata, level=None, curtailment=None, rng=None):
     
     # Netting the interconnections:
     if 'FlowIn' in plotdata and 'FlowOut' in plotdata:
-        plotdata['FlowIn'],plotdata['FlowOut'] = (np.maximum(0,plotdata['FlowIn']-plotdata['FlowOut']),np.maximum(0,plotdata['FlowOut']-plotdata['FlowIn']))
-        
+        plotdata['FlowIn'],plotdata['FlowOut'] = (np.maximum(0,plotdata['FlowIn']-plotdata['FlowOut']),-np.maximum(0,plotdata['FlowOut']-plotdata['FlowIn']))
+#    print(plotdata['FlowIn'])    
+#    print(plotdata['FlowOut'])
     # find the zero line position:
     cols = plotdata.columns.tolist()
     idx_zero = 0
@@ -361,6 +375,7 @@ def plot_dispatch(demand, plotdata, level=None, curtailment=None, rng=None):
     sumplot_pos = plotdata[cols[idx_zero:]].cumsum(axis=1)
     sumplot_pos['zero'] = 0
     sumplot_pos = sumplot_pos[['zero'] + sumplot_pos.columns[:-1].tolist()]
+    
 
     fig = plt.figure(figsize=(13, 7))
 
@@ -368,6 +383,7 @@ def plot_dispatch(demand, plotdata, level=None, curtailment=None, rng=None):
     ax = fig.add_subplot(111)
 #    ax.set_ylim([-10000,15000])
     ax.plot(pdrng, demand[pdrng], color='k')
+    ax.plot(pdrng, demandh[pdrng], color='blue',alpha=0.5)
     plt.title('Power dispatch for country ' + demand.name[1])
 
     labels = []
@@ -420,14 +436,16 @@ def plot_dispatch(demand, plotdata, level=None, curtailment=None, rng=None):
         ax2.yaxis.set_label_position("right")
         ax2.set_ylabel('Level [MWh]')
         ax2.yaxis.label.set_fontsize(16)
-        line_SOC = mlines.Line2D([], [], color='black', alpha=0.3, label='Reservoir', linestyle='--')
+        line_SOC = mlines.Line2D([], [], color='black', alpha=0.3, label='Heat reservoir', linestyle='--')
 
     line_demand = mlines.Line2D([], [], color='black', label='Load')
+    line_demandh = mlines.Line2D([], [], color='blue', alpha=0.5, label='Load with HP')
+    
     plt.legend(handles=[line_demand] + patches[::-1], loc=4)
     if level is None:
         plt.legend(handles=[line_demand] + patches[::-1], loc=4)
     else:
-        plt.legend(title='Dispatch for ' + demand.name[1], handles=[line_demand] + [line_SOC] + patches[::-1], loc=4)
+        plt.legend(title='Dispatch for ' + demand.name[1], handles=[line_demand]+[line_demandh] + [line_SOC] + patches[::-1], loc=4)
 
 
 def plot_rug(df_series, on_off=False, cmap='Greys'):
@@ -533,6 +551,311 @@ def plot_energy_country_fuel(inputs, results, PPindicators):
             color='k')
     return ax
 
+def plot_heat_balanceDH(inputs,results,plot=True):    
+    DHunits = inputs['DHunits']
+    Heat_balance=pd.DataFrame(columns=['HP','CHP','gen'],index=inputs['sets']['dh'])
+    for u in DHunits.HP_capacity.index:
+        Heat_balance['HP'][u] = results['OutputQ_dot_hp'][u].sum()/ 1E6
+        Heat_balance['CHP'][u] = results['OutputQ_dot_chp'][u].sum()/ 1E6
+    heat_demand=inputs['param_df']['HeatDemandDH'].sum()/ 1E6
+    Heat_loss=pd.DataFrame(columns=['loss'],index=inputs['sets']['dh'])
+    Heat_loss=(DHunits.TESSelfDischarge*results['OutputQ_sto']).sum()/ 1E6
+    plt.figure(i)
+    ax = Heat_balance.plot(kind="bar", figsize=(12, 8), stacked=True, alpha=0.8, legend='reverse',
+                                title='Total heat generation')
+    ax.set_ylabel('Heat generation [TWh]')
+    ax.barh(heat_demand, left=ax.get_xticks() - 0.4, width=[0.8] * len(heat_demand), height=ax.get_ylim()[1]*0.005, linewidth=2,
+                color='k')
+    
+    ax.barh(Heat_loss, left=ax.get_xticks() - 0.4, width=[0.8] * len(heat_demand), height=ax.get_ylim()[1]*0.005, linewidth=2,
+                color='red')
+    ax.barh(heat_demand+Heat_loss, left=ax.get_xticks() - 0.4, width=[0.8] * len(heat_demand), height=ax.get_ylim()[1]*0.005, linewidth=2,
+                color='k')
+    for u in DHunits.HP_capacity.index:
+        Heat_balance['gen'][u] = results['OutputQ_dot_gen'][u].sum()/ 1E6
+    plt.figure(5)
+    ax2 = Heat_balance['gen'].plot(kind="bar", figsize=(12, 8), stacked=False, alpha=0.8, legend='reverse',
+                                title='Total heat generation')
+    return {}
+
+def plot_dispatch_heat(inputs,results,path,rng,Country,plot=True):
+    import matplotlib.patches as mpatches
+    import matplotlib.lines as mlines
+    fig = plt.figure(figsize=(13, 7))
+    Nzones = len(inputs['sets']['n'])
+    c = inputs['sets']['n'][np.random.randint(Nzones)]
+    plotdata = get_plot_data(inputs, results, c)
+    if rng is None:    
+        pdrng = plotdata.index[:min(len(plotdata)-1,7*24)]
+    else:
+        pdrng = rng
+    
+    DHunits = inputs['DHunits']
+    HPunits = inputs['HPunits']
+    for u in DHunits.index:
+        if u not in results['OutputHeatSlack']:
+            results['OutputHeatSlack'][u]=0 
+        if u not in results['OutputQ_dot_chp']:
+            results['OutputQ_dot_chp'][u]=0
+            
+    for u in HPunits.index:        
+        if u not in results['OutputQ_dot_hp']:
+            results['OutputQ_dot_hp'][u]=0
+    if Country:
+        labels = []
+        patches = []
+        colorlist = []
+        ax = fig.add_subplot(111)
+        plt.title('Power dispatch for country ' + DHunits.Zone[1])
+        HP_gen=results['OutputQ_dot_hp'].sum(1).loc[pdrng].values
+        CHP_gen=results['OutputQ_dot_chp'].sum(1).loc[pdrng].values+HP_gen
+        zeros_gen=CHP_gen*0
+        color = commons['colorsDH']
+        alpha = 0.5 
+        color=commons['colorsDH']['HP']
+        plt.fill_between(pdrng, zeros_gen, HP_gen, color=color, alpha=alpha)
+        labels.append('HP')
+        patches.append(mpatches.Patch(color=color, alpha=alpha, label='HP'))
+        colorlist.append(color)
+        color=commons['colorsDH']['CHP']
+        plt.fill_between(pdrng, HP_gen, CHP_gen, color=color, alpha=alpha)
+        labels.append('CHP')
+        patches.append(mpatches.Patch(color=color, alpha=alpha, label='CHP'))
+        colorlist.append(color)
+        ax.set_ylabel('Heat [MW]')
+        ax.yaxis.label.set_fontsize(16)
+        plt.legend(handles= patches[::-1])
+        
+        fig = plt.figure(figsize=(13, 7))
+        HP_gen=results['OutputQ_dot_hp'].sum(1).loc[pdrng].values
+        CHP_gen=results['OutputQ_dot_chp'].sum(1).loc[pdrng].values+HP_gen
+        for i in range(len(HP_gen)):
+            if HP_gen[i]+CHP_gen[i] != 0:
+                HP_gen[i]=HP_gen[i]/(HP_gen[i]+CHP_gen[i])
+                CHP_gen[i]=CHP_gen[i]/(HP_gen[i]+CHP_gen[i])
+        zeros_gen=CHP_gen*0
+        color = commons['colorsDH']
+        alpha = 0.5 
+        color=commons['colorsDH']['HP']
+        plt.fill_between(pdrng, zeros_gen, HP_gen, color=color, alpha=alpha)
+        labels.append('HP')
+        patches.append(mpatches.Patch(color=color, alpha=alpha, label='HP'))
+        colorlist.append(color)
+        color=commons['colorsDH']['CHP']
+        plt.fill_between(pdrng, HP_gen, CHP_gen, color=color, alpha=alpha)
+        labels.append('CHP')
+        patches.append(mpatches.Patch(color=color, alpha=alpha, label='CHP'))
+        colorlist.append(color)
+        ax.set_ylabel('Heat [MW]')
+        ax.yaxis.label.set_fontsize(16)
+        plt.legend(handles= patches[::-1])
+            
+    
+    else:
+#        print(results['OutputQ_dot_hp'])
+        for j, u in enumerate(inputs['sets']['dh']):
+            fig = plt.figure(figsize=(13, 7))
+            labels = []
+            patches = []
+            colorlist = []
+            ax = fig.add_subplot(111)
+            plt.title('Power dispatch for the district heating ' + DHunits.Unit[u])
+#            print(results['OutputQ_dot_hp'].loc[pdrng].values)
+            
+            HP_gen=results['OutputQ_dot_hp'].loc[pdrng].values*0
+            
+            a=0
+            for e,v in enumerate(inputs['sets']['hp']):
+                if HPunits.DH[e] == DHunits.Unit[j]:
+                    HP_gen[:,a]=results['OutputQ_dot_hp'].loc[pdrng][v]
+                    a=a+1
+            
+#            print(HP_gen[:,1])
+            CHP_gen=results['OutputQ_dot_chp'][u].loc[pdrng].values+HP_gen.sum(1)
+            HeatSlack_gen=results['OutputHeatSlack'][u].loc[pdrng].values+CHP_gen
+            zeros_gen=CHP_gen*0
+            color = commons['colorsDH']
+            alpha = 0.5 
+            color=commons['colorsDH']['HP']
+            plt.fill_between(pdrng, zeros_gen, HP_gen[:,0],color=color, alpha=0.1)
+            labels.append(HPunits.Unit[0])
+            patches.append(mpatches.Patch(color=color, alpha=0.1, label=HPunits.Unit[0]))
+            colorlist.append(color)
+            a=0
+            for e,v in enumerate(inputs['sets']['hp']):
+                if HPunits.DH[e] == DHunits.Unit[j]:
+                    if a<len(HP_gen[0,:])-1:
+                        HP_gen[:,a+1]=HP_gen[:,a]+HP_gen[:,a+1]
+                        color=commons['colorsDH']['HP']
+                        plt.fill_between(pdrng, HP_gen[:,a],HP_gen[:,a+1],color=color, alpha=(2+a)/10)
+                        labels.append(HPunits.Unit[e+1])
+                        patches.append(mpatches.Patch(color=color, alpha=(2+a)/10, label=HPunits.Unit[e+1]))
+                        colorlist.append(color)
+                    a=a+1
+           
+            color=commons['colorsDH']['CHP']
+            plt.fill_between(pdrng, HP_gen[:,-1], CHP_gen, color=color, alpha=alpha)
+            labels.append('CHP')
+            patches.append(mpatches.Patch(color=color, alpha=alpha, label='CHP'))
+            colorlist.append(color)
+            color=commons['colorsDH']['Boiler']
+            plt.fill_between(pdrng, CHP_gen, HeatSlack_gen, color=color, alpha=alpha)
+            labels.append('Boiler')
+            patches.append(mpatches.Patch(color=color, alpha=alpha, label='Boiler'))
+            colorlist.append(color)
+            HeatDemandDH=inputs['param_df']['HeatDemandDH'][u][pdrng]
+            temp=np.where(HeatDemandDH > HeatSlack_gen, HeatDemandDH, HeatSlack_gen)
+            ax.plot(pdrng,  HeatDemandDH, color='k')
+            color=commons['colorsDH']['Reservoir out']
+            plt.fill_between(pdrng,  HeatSlack_gen,temp ,color=color, alpha=0.3)
+            labels.append('Reservoir out')
+            patches.append(mpatches.Patch(color=color, alpha=0.3, label='Reservoir out'))
+            colorlist.append(color)
+            ax.set_ylabel('Heat [MW]')
+            ax.yaxis.label.set_fontsize(16)
+            line_heatdemand = mlines.Line2D([], [], color='k', label='Heat demand')
+            if 'OutputQ_sto' in results:
+                level = filter_by_countryDH(results['OutputQ_sto'], inputs, c)
+                
+                if level is not None:
+                    # Create right axis:
+                    ax2 = fig.add_subplot(111, sharex=ax, frameon=False, label='aa')
+                    ax2.plot(pdrng, level[u][pdrng], color='k', alpha=0.3, linestyle='--')
+                    ax2.yaxis.tick_right()
+                    ax2.yaxis.set_label_position("right")
+                    ax2.set_ylabel('Level [MWh]')
+                    ax2.yaxis.label.set_fontsize(16)
+                    line_SOC = mlines.Line2D([], [], color='black', alpha=0.3, label='Heat reservoir', linestyle='--')
+            plt.legend(handles=[line_heatdemand]+[line_SOC]+ patches[::-1])
+            plt.savefig(path +'/Heat_dispatch.eps', format='eps', dpi=1000)
+        
+        for j, u in enumerate(inputs['sets']['dh']):
+            fig = plt.figure(figsize=(13, 7))
+            labels = []
+            patches = []
+            colorlist = []
+            ax = fig.add_subplot(111)
+            plt.title('Power dispatch for the district heating ' + DHunits.Unit[u])
+            a=0
+            for e,v in enumerate(inputs['sets']['hp']):
+                if HPunits.DH[e] == DHunits.Unit[j]:
+                    HP_gen[:,a]=results['OutputQ_dot_hp'].loc[pdrng][v]
+                    a=a+1
+            CHP_gen=results['OutputQ_dot_chp'][u].loc[pdrng].values
+            HeatSlack_gen=results['OutputHeatSlack'][u].loc[pdrng].values 
+            Heat_gen=HP_gen.sum(1)+CHP_gen+HeatSlack_gen
+            HP_gen_T=HP_gen*0
+            CHP_gen_T=CHP_gen*0
+            HeatSlack_gen_T=HeatSlack_gen*0
+            for i in range(len(HP_gen[:,-1])):
+                if HP_gen.sum(1)[i]+CHP_gen[i] != 0:
+                    HP_gen_T[i]=HP_gen[i]/Heat_gen[i]
+                    CHP_gen_T[i]=CHP_gen[i]/Heat_gen[i]
+                    HeatSlack_gen_T[i]=HeatSlack_gen[i]/Heat_gen[i]
+            
+            T_gen_in=inputs['parameters']['T_gen_in']['val'][j]
+            T_gen_out=inputs['parameters']['T_gen_out']['val'][j]
+            zeros_gen=CHP_gen*0+int(T_gen_in)
+            print(HP_gen_T)
+            HP_gen_T[:,0]=HP_gen_T[:,0]*(int(T_gen_out)-int(T_gen_in))  +int(T_gen_in)
+            a=0
+#            print(HP_gen_T)
+            for e,v in enumerate(inputs['sets']['hp']):
+                if HPunits.DH[e] == DHunits.Unit[j]:
+                    if a<len(HP_gen[0,:])-1:
+                        print(a)
+                        HP_gen_T[:,a+1]=HP_gen_T[:,a+1]*(int(T_gen_out)-int(T_gen_in))+HP_gen_T[:,a]
+                    a=a+1
+            print(HP_gen_T)
+            CHP_gen_T=CHP_gen_T*(int(T_gen_out)-int(T_gen_in))+HP_gen_T[:,-1]
+            HeatSlack_gen_T=HeatSlack_gen_T*(int(T_gen_out)-int(T_gen_in))+CHP_gen_T
+            
+            
+            
+            
+            color = commons['colorsDH']
+            alpha = 0.5 
+            color=commons['colorsDH']['HP']
+            plt.fill_between(pdrng, zeros_gen, HP_gen_T[:,0],color=color, alpha=0.1)
+            labels.append(HPunits.Unit[0])
+            patches.append(mpatches.Patch(color=color, alpha=0.1, label=HPunits.Unit[0]))
+            colorlist.append(color)
+            a=0
+            for e,v in enumerate(inputs['sets']['hp']):
+                if HPunits.DH[e] == DHunits.Unit[j]:
+                    if a<len(HP_gen[0,:])-1:
+                        color=commons['colorsDH']['HP']
+                        plt.fill_between(pdrng, HP_gen_T[:,a],HP_gen_T[:,a+1],color=color, alpha=(2+a)/10)
+                        labels.append(HPunits.Unit[e+1])
+                        patches.append(mpatches.Patch(color=color, alpha=(2+a)/10, label=HPunits.Unit[e+1]))
+                        colorlist.append(color)
+                    a=a+1
+            
+            color=commons['colorsDH']['CHP']
+            plt.fill_between(pdrng, HP_gen_T[:,-1], CHP_gen_T, color=color, alpha=alpha)
+            labels.append('CHP')
+            patches.append(mpatches.Patch(color=color, alpha=alpha, label='CHP'))
+            colorlist.append(color)
+            color=commons['colorsDH']['Boiler']
+            plt.fill_between(pdrng, CHP_gen_T,HeatSlack_gen_T, color=color, alpha=alpha)
+            labels.append('CHP')
+            patches.append(mpatches.Patch(color=color, alpha=alpha, label='Boiler'))
+            colorlist.append(color)
+            ax.set_ylabel('Temperature covered [C]')
+            ax.yaxis.label.set_fontsize(16)
+            plt.legend(handles= patches[::-1])
+
+def plot_CHP(inputs,results,path,rng,plot=True): 
+    
+    from scipy.stats import gaussian_kde
+    Nzones = len(inputs['sets']['n'])
+    c = inputs['sets']['n'][np.random.randint(Nzones)]
+    plotdata = get_plot_data(inputs, results, c)
+    if rng is None:    
+        pdrng = plotdata.index[:min(len(plotdata)-1,7*24)]
+    else:
+        pdrng = rng
+    
+    plants = inputs['units']
+    DHunits = inputs['DHunits']
+    for u in plants.index:
+        if plants.DH[u] in DHunits.index and plants.loc[u, 'CHPType'].lower() == 'extraction':
+#            print(u)
+            plant_PowerCapacity = plants.loc[u,'PowerCapacity']
+            plant_MaxHeat = plants.loc[u, 'CHPMaxHeat']
+            plant_powertoheat =  plants.loc[u,'CHPPowerToHeat']
+            plant_powerlossfactor = plants.loc[u,'CHPPowerLossFactor']
+#            print(plant_PowerCapacity,plant_MaxHeat,plant_powertoheat,plant_powerlossfactor)
+#           
+#            if np.isnan(plant_MaxHeat):
+#                plant_PowerCapacity=plant_PowerCapacity/(1+plant_powerlossfactor/plant_powertoheat)
+#            else:
+#                plant_PowerCapacity=plant_PowerCapacity-plant_MaxHeat
+#    
+            Q_dot= np.arange(0, plant_PowerCapacity/plant_powertoheat, 1)
+            
+            a=np.where(-Q_dot*plant_powerlossfactor+plant_PowerCapacity>Q_dot*plant_powertoheat)
+            Q_dot=a[-1]
+#            print(Q_dot)
+            line_down=Q_dot*plant_powertoheat
+            line_up=-Q_dot*plant_powerlossfactor+plant_PowerCapacity
+            fig = plt.figure(figsize=(13, 7))
+            ax = fig.add_subplot(111)
+            plt.title('Feasible operating region of ' + plants.Unit[u] + ' for the district of '+plants.DH[u])
+            ax.plot(Q_dot, line_up, color='k')
+            ax.plot(Q_dot, line_down, color='k')
+#            print(results['OutputQ_dot_chp'][plants.DH[u]])
+#            print(results['OutputPower'][u])
+            Q_dot_CHP=results['OutputQ_dot_chp'][plants.DH[u]].loc[pdrng].values
+            P_CHP=results['OutputPower'][u].loc[pdrng].values
+            x=Q_dot_CHP
+            y=P_CHP
+            xy = np.vstack([x,y])
+            z = gaussian_kde(xy)(xy)
+            
+            plt.scatter(x, y, s = 200, c=z, edgecolors = '')
+#            ax=plot.axvline(x=plant_MaxHeat, color='k', linestyle='--')
+            
 
 def plot_country_capacities(inputs,plot=True):
     """
@@ -551,7 +874,6 @@ def plot_country_capacities(inputs,plot=True):
         idx = ((units.Zone == n) & (units.Fuel==f))
         PowerCapacity.loc[n,f] = (units.PowerCapacity[idx]*units.Nunits[idx]).sum()
         StorageCapacity.loc[n,f] = (units.StorageCapacity[idx]*units.Nunits[idx]).sum()
-
     cols = [col for col in commons['MeritOrder'] if col in PowerCapacity]
     PowerCapacity = PowerCapacity[cols]
     if plot:
@@ -563,6 +885,48 @@ def plot_country_capacities(inputs,plot=True):
         ax.barh(demand, left=ax.get_xticks() - 0.4, width=[0.8] * len(demand), height=ax.get_ylim()[1]*0.005, linewidth=2,
                 color='k')
     return {'PowerCapacity':PowerCapacity,'StorageCapacity':StorageCapacity}
+
+
+def plot_country_capacitiesDH(inputs,plot=True):
+    """
+    Plots the installed capacity for each country, disaggregated by fuel type
+
+    :param inputs:         Dictionnary with the inputs of the model (output of the function GetResults)
+    """
+    DHunits = inputs['DHunits']
+    TES_capacity=pd.DataFrame(columns=['TES_capacity'],index=inputs['sets']['dh'])
+    for u in DHunits.TESCapacity.index:
+        TES_capacity['TES_capacity'][u] = DHunits.TESCapacity[u]
+    
+    #Thermal storage capacity plot
+    i=2
+    plt.figure(i)
+    ax = TES_capacity.plot(kind="bar", figsize=(12, 8), alpha=0.8, legend='reverse',
+                                title='Storage capacity per district heating network')
+    ax.set_ylabel('Capacity [MW]')
+    
+    #Heat generation capacity plot
+    i=i+1
+    plt.figure(i)
+    units = inputs['units']
+    
+    Heat_capacity=pd.DataFrame(columns=['HP','CHP'],index=inputs['sets']['dh'])
+    for u in DHunits.HP_capacity.index:
+        Heat_capacity['HP'][u] = DHunits.HP_capacity[u]/1000
+    for u in units.index:
+        if units.DH[u] in DHunits.index:
+            Heat_capacity['CHP'][units.DH[u]]=units.PowerCapacity[u] 
+    heat_demand=inputs['param_df']['HeatDemandDH'].max()
+
+    
+    ax = Heat_capacity.plot(kind="bar", figsize=(12, 8), stacked=True,alpha=0.8, legend='reverse',
+                                title='Heat generation capacity per district heating network (the horizontal lines indicate the peak demand)')
+    ax.set_ylabel('Capacity [MW]')
+    units = inputs['units']
+    ax.barh(heat_demand, left=ax.get_xticks() - 0.4, width=[0.8] * len(heat_demand), height=ax.get_ylim()[1]*0.005, linewidth=2,
+                color='k')
+    
+    return {'PowerCapacity'}
 
 
 
@@ -582,8 +946,11 @@ def get_sim_results(path='.', cache=False, temp_path='.pickle'):
 
     with open(inputfile, 'rb') as f:
         inputs = pickle.load(f)
-
     # Clean power plant names:
+    inputs['sets']['dh'] = clean_strings(inputs['sets']['dh'])
+    inputs['DHunits'].index = clean_strings(inputs['DHunits'].index.tolist())
+    inputs['sets']['hp'] = clean_strings(inputs['sets']['hp'])
+    inputs['HPunits'].index = clean_strings(inputs['HPunits'].index.tolist())
     inputs['sets']['u'] = clean_strings(inputs['sets']['u'])
     inputs['units'].index = clean_strings(inputs['units'].index.tolist())
     # inputs['units']['Unit'] = clean_strings(inputs['units']['Unit'].tolist())
@@ -634,11 +1001,14 @@ def get_sim_results(path='.', cache=False, temp_path='.pickle'):
     index = pd.DatetimeIndex(start=pd.datetime(*StartDate), end=pd.datetime(*StopDate), freq='h')
     index_long = pd.DatetimeIndex(start=pd.datetime(*StartDate), end=StopDate_long, freq='h')
 
+
+#__________________________%% Modification %% __________________________________
     # Setting the proper index to the result dataframes:
     for key in ['OutputPower', 'OutputSystemCost', 'OutputCommitted', 'OutputCurtailedPower', 'OutputFlow',
                 'OutputShedLoad', 'OutputSpillage', 'OutputStorageLevel', 'OutputStorageInput', 'LostLoad_2U', 'LostLoad_3U',
                 'LostLoad_MaxPower', 'LostLoad_MinPower', 'LostLoad_RampUp', 'LostLoad_RampDown', 'LostLoad_2D',
-                'ShadowPrice', 'OutputHeat', 'OutputHeatSlack','status']:
+                'ShadowPrice', 'OutputHeat', 'OutputHeatSlack','status','OutputQ_sto','OutputQ_dot_hp','OutputQ_dot_chp','OutputLOAD_HP','OutputCostHeatCHP','OutputDemand_eff','OutputQ_dot_dh']: #Output_Q_sto added
+#_______________________________________________________________________________
         if key in results:
             if len(results[key]) == len(
                     index_long):  # Case of variables for which the look-ahead period recorded (e.g. the lost loads)
@@ -649,7 +1019,7 @@ def get_sim_results(path='.', cache=False, temp_path='.pickle'):
             else:  # Variables whose index is not complete (sparse formulation)
                 results[key].index = index_long[results[key].index - 1]
                 if key in ['OutputPower', 'OutputSystemCost', 'OutputCommitted', 'OutputCurtailedPower', 'OutputFlow',
-                           'OutputShedLoad', 'OutputSpillage', 'OutputStorageLevel', 'OutputStorageInput','OutputHeat', 'OutputHeatSlack']:
+                           'OutputShedLoad', 'OutputSpillage', 'OutputStorageLevel', 'OutputStorageInput','OutputHeat', 'OutputHeatSlack','OutputQ_sto','OutputQ_dot_hp','OutputQ_dot_chp','OutputHeatSlack','OutputLOAD_HP','OutputCostHeatCHP','OutputDemand_eff']:
                     results[key] = results[key].reindex(index).fillna(0)
                     # results[key].fillna(0,inplace=True)
         else:
@@ -657,10 +1027,12 @@ def get_sim_results(path='.', cache=False, temp_path='.pickle'):
 
     # Clean power plant names:
     results['OutputPower'].columns = clean_strings(results['OutputPower'].columns.tolist())
+    results['OutputQ_sto'].columns = clean_strings(results['OutputQ_sto'].columns.tolist())
+    
+    
     # Remove epsilons:
     if 'ShadowPrice' in results:
         results['ShadowPrice'][results['ShadowPrice'] == 5e300] = 0
-
     for key in results['OutputPower']:
         if key not in inputs['units'].index:
             logging.error("Unit '" + key + "' present in the results cannot be found in the input 'units' dataframe")
@@ -699,21 +1071,24 @@ def plot_country(inputs, results, c='', rng=None):
         logging.critical('Randomly selected country: '+ c)
 
     plotdata = get_plot_data(inputs, results, c)
-
-    if 'OutputStorageLevel' in results:
-        level = filter_by_country(results['OutputStorageLevel'], inputs, c)
+    if 'OutputQ_sto' in results:
+        level = filter_by_countryDH(results['OutputQ_sto'], inputs, c)
         level = level.sum(axis=1)
+    
+    
     else:
         level = pd.Series(0, index=results['OutputPower'].index)
 
     demand = inputs['param_df']['Demand'][('DA', c)]
     sum_generation = plotdata.sum(axis=1)
+    
+    demandh = demand+results['OutputLOAD_HP'].sum(axis=1)
 
     try:
         if 'OutputCurtailedPower' in results and c in results['OutputCurtailedPower']:
-            plot_dispatch(demand, plotdata, level, curtailment=results['OutputCurtailedPower'][c], rng=rng)
+            plot_dispatch(demand,demandh, plotdata, level, curtailment=results['OutputCurtailedPower'][c], rng=rng)
         else:
-            plot_dispatch(demand, plotdata, level, rng=rng)
+            plot_dispatch(demand,demandh, plotdata, level, rng=rng)
     except:
         if 'OutputCurtailedPower' in results and c in results['OutputCurtailedPower']:
             plot_dispatch_safe(demand, plotdata, level, curtailment=results['OutputCurtailedPower'][c], rng=rng)
@@ -769,8 +1144,23 @@ def get_result_analysis(inputs, results):
     NetImports = -get_imports(results['OutputFlow'], 'RoW')
 
     Cost_kwh = results['OutputSystemCost'].sum() / (TotalLoad - NetImports)
-
-    print ('\nAverage electricity cost : ' + str(Cost_kwh) + ' EUR/MWh')
+    
+    CostHP=pd.DataFrame(index=results['OutputSystemCost'].index)
+    CostHP=results['OutputSystemCost']
+    CostHP_heat=results['OutputSystemCost']
+    CostCHP_heat=results['OutputSystemCost']
+    for i in results['OutputSystemCost'].index:
+        CostHP[i]=results['OutputLOAD_HP'].sum(axis=1)[i]/results['OutputDemand_eff'][i]*results['OutputSystemCost'][i]
+        CostHP_heat[i]=CostHP[i]
+#    CostHP_kwh=CostHP.sum()/results['OutputQ_dot_hp'].sum().sum()
+#    CostCHP_kwh=results['OutputCostHeatCHP'].sum()/results['OutputQ_dot_chp'].sum().sum()
+    CostHP_kwh=CostHP.sum()/(TotalLoad - NetImports)
+    CostCHP_kwh=results['OutputCostHeatCHP'].sum()/(TotalLoad - NetImports)
+    Cost_heat_kwh =CostCHP_kwh+CostHP_kwh
+    Cost_heat_kwh_heat = Cost_heat_kwh*(TotalLoad - NetImports)/(results['OutputQ_dot_hp'].sum().sum()+results['OutputQ_dot_chp'].sum().sum())
+#    Cost_heat = results['OutputSystemCost']
+    print ('\nAverage total energy cost : ' + str(Cost_kwh) + ' EUR/MWh_elec \n \n         electricity part : '+str(Cost_kwh-Cost_heat_kwh)+' EUR/MWh_elec ('+str((Cost_kwh-Cost_heat_kwh)/Cost_kwh*100)+'%)\n                heat part : '+str(Cost_heat_kwh)+' EUR/MWh_elec ('+str((Cost_heat_kwh)/Cost_kwh*100)+'%)')
+    print ('\n  Average total heat cost : ' + str(Cost_heat_kwh_heat) + ' EUR/MWh_heat')
 
     for key in ['LostLoad_RampUp', 'LostLoad_2D', 'LostLoad_MinPower',
                 'LostLoad_RampDown', 'LostLoad_2U', 'LostLoad_3U', 'LostLoad_MaxPower']:

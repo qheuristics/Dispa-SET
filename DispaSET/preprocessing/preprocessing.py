@@ -19,8 +19,10 @@ except:
     pass
 
 from .data_check import check_units, check_chp, check_sto, check_heat_demand, check_df, isStorage, check_MinMaxFlows,check_AvailabilityFactors, check_clustering
-from .utils import clustering, interconnections, incidence_matrix
-from .data_handler import UnitBasedTable,NodeBasedTable,merge_series, define_parameter, write_to_excel, load_csv
+from .utils import clustering,DHclustering, interconnections, incidence_matrix
+#__________________________%% Modification %% __________________________________
+from .data_handler import UnitBasedTable,DHBasedTable,NodeBasedTable,merge_series,DHmerge_series, define_parameter, write_to_excel, load_csv
+#_______________________________________________________________________________
 
 from ..misc.gdx_handler import write_variables
 from ..common import commonvars
@@ -35,7 +37,7 @@ def get_git_revision_tag():
     except:
         return 'NA'
 
-def build_simulation(config,plot_load=False):
+def build_simulation(config,config_heat,plot_load=False):
     """
     This function reads the DispaSET config, loads the specified data,
     processes it when needed, and formats it in the proper DispaSET format.
@@ -123,7 +125,7 @@ def build_simulation(config,plot_load=False):
     # check plant list:
     check_units(config, plants)
     # If not present, add the non-compulsory fields to the units table:
-    for key in ['CHPPowerLossFactor','CHPPowerToHeat','CHPType','STOCapacity','STOSelfDischarge','STOMaxChargingPower','STOChargingEfficiency', 'CHPMaxHeat']:
+    for key in ['CHPPowerLossFactor','CHPPowerToHeat','CHPType','STOCapacity','STOSelfDischarge','STOMaxChargingPower','STOChargingEfficiency', 'CHPMaxHeat','DHIndex']:
         if key not in plants.columns:
             plants[key] = np.nan
 
@@ -134,14 +136,39 @@ def build_simulation(config,plot_load=False):
     
     # Defining the CHPs:
     plants_chp = plants[[str(x).lower() in commons['types_CHP'] for x in plants['CHPType']]]
-
+##__________________________%% Modification %% __________________________________
+#    # Defining the heat generators:
+#    plants_heat = plants[[str(x).lower() in commons['types_HEAT'] for x in plants['HEATType']]]
+    DHplants = pd.DataFrame()
+    if os.path.isfile(config_heat['DistrictHeating']):
+        DHplants = load_csv(config['DistrictHeating'])
+    elif '##' in config_heat['DistrictHeating']:
+        for c in config['countries']:
+            path = config_heat['DistrictHeating'].replace('##', str(c))
+            tmp = load_csv(path)
+            DHplants = DHplants.append(tmp, ignore_index=True)
+    DHplants.index = range(len(DHplants))
+    
+    HPplants = pd.DataFrame()
+    if os.path.isfile(config_heat['HeatPumps']):
+        HPplants = load_csv(config['HeatPumps'])
+    elif '##' in config_heat['HeatPumps']:
+        for c in config['countries']:
+            path = config_heat['HeatPumps'].replace('##', str(c))
+            tmp = load_csv(path)
+            HPplants = HPplants.append(tmp, ignore_index=True)
+    HPplants.index = range(len(HPplants))
+    
+    for u in HPplants.index:
+        if HPplants['DH'][u] not in DHplants['Unit'].values:
+            HPplants=HPplants.drop([u])
+##_______________________________________________________________________________
     Outages = UnitBasedTable(plants,config['Outages'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology'],tablename='Outages')
     AF = UnitBasedTable(plants,config['RenewablesAF'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology'],tablename='AvailabilityFactors',default=1,RestrictWarning=commons['tech_renewables'])
     ReservoirLevels = UnitBasedTable(plants_sto,config['ReservoirLevels'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology'],tablename='ReservoirLevels',default=0)
     ReservoirScaledInflows = UnitBasedTable(plants_sto,config['ReservoirScaledInflows'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology'],tablename='ReservoirScaledInflows',default=0)
     HeatDemand = UnitBasedTable(plants_chp,config['HeatDemand'],idx_utc_noloc,config['countries'],fallbacks=['Unit'],tablename='HeatDemand',default=0)
-    CostHeatSlack = UnitBasedTable(plants_chp,config['CostHeatSlack'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Zone'],tablename='CostHeatSlack',default=config['default']['CostHeatSlack'])
-
+#    CostHeatSlack = UnitBasedTable(plants_chp,config['CostHeatSlack'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Zone'],tablename='CostHeatSlack',default=config['default']['CostHeatSlack'])
     # data checks:
     check_AvailabilityFactors(plants,AF)
     check_heat_demand(plants,HeatDemand)
@@ -180,7 +207,7 @@ def build_simulation(config,plot_load=False):
     Plants_merged, mapping = clustering(plants, method=config['SimulationType'])
     # Check clustering:
     check_clustering(plants,Plants_merged)
-
+    
     # Renaming the columns to ease the production of parameters:
     Plants_merged.rename(columns={'StartUpCost': 'CostStartUp',
                                   'RampUpMax': 'RampUpMaximum',
@@ -204,6 +231,117 @@ def build_simulation(config,plot_load=False):
         logging.error('plant indexes not unique!')
         sys.exit(1)
 
+ #__________________________%% Modification %% __________________________________
+
+    # Portofolio modification
+    # applying the config_heat file portofolio by scaling each unit to make 
+    # the sum of one technology be equal to the asked capacity 
+    # /!\ There must be at least on unit of the type for the scalling to apply
+    # If there is no indication from the config_heat file, the capacity stay the same
+    
+    # PV scaling
+
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Technology[u] == 'PHOT':
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Solar Capacity to the value ' + str(config_heat['Portofolio']['Solar']))
+    for u in Plants_merged.index:
+        if Plants_merged.Technology[u] == 'PHOT':
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Solar']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Solar']    
+# Wind onshore scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Technology[u] == 'WTON':
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Onshore Wind Capacity to the value ' + str(config_heat['Portofolio']['Winon']))
+    for u in Plants_merged.index:
+        if Plants_merged.Technology[u] == 'WTON':
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Winon']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Winon']    
+# Wind offshore scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Technology[u] == 'WTOF':
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Offshore Wind Capacity to the value ' + str(config_heat['Portofolio']['Winoff']))
+    for u in Plants_merged.index:
+        if Plants_merged.Technology[u] == 'WTOF':
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Winoff']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Winoff']    
+# Biomass scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'BIO':
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Biomass Capacity to the value ' + str(config_heat['Portofolio']['Biomass']))
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'BIO'and Plants_merged['CHPType'][u] not in commons['types_CHP']:
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Biomass']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Biomass']
+# Gas scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'GAS':
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Gas Capacity to the value ' + str(config_heat['Portofolio']['Gas']))
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'GAS' and Plants_merged['CHPType'][u] not in commons['types_CHP']:
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Gas']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Gas']
+# Coal scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'HRD'and Plants_merged['CHPType'][u] not in commons['types_CHP']:
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Coal Capacity to the value ' + str(config_heat['Portofolio']['Coal']))
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'HRD':
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Coal']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  0
+# Oil scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'OIL'and Plants_merged['CHPType'][u] not in commons['types_CHP']:
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Oil Capacity to the value ' + str(config_heat['Portofolio']['Oil']))
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'OIL':
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Oil']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Oil']
+# Nuclear scaling
+    a=0
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'NUC'and Plants_merged['CHPType'][u] not in commons['types_CHP']:
+            a=a+Plants_merged.loc[u, 'PowerCapacity']   
+    logging.info('Modifying Nuclear Capacity to the value ' + str(config_heat['Portofolio']['Nuclear']))
+    for u in Plants_merged.index:
+        if Plants_merged.Fuel[u] == 'NUC':
+            if a!=0:
+                Plants_merged.loc[u, 'PowerCapacity'] = Plants_merged.loc[u, 'PowerCapacity'] * (config_heat['Portofolio']['Nuclear']/a)
+            else:
+                Plants_merged.loc[u, 'PowerCapacity'] =  config_heat['Portofolio']['Nuclear']
+    
+            
+    
+  
+
+#_______________________________________________________________________________       
     # Apply scaling factors:
     if config['modifiers']['Solar'] != 1:
         logging.info('Scaling Solar Capacity by a factor ' + str(config['modifiers']['Solar']))
@@ -223,15 +361,22 @@ def build_simulation(config,plot_load=False):
                 Plants_merged.loc[u, 'StorageCapacity'] = Plants_merged.loc[u, 'StorageCapacity'] * config['modifiers']['Storage']
                 Plants_merged.loc[u, 'StorageChargingCapacity'] = Plants_merged.loc[u, 'StorageChargingCapacity'] * config['modifiers']['Storage']
 
+
+
+
+
     # Defining the hydro storages:
     Plants_sto = Plants_merged[[u in commons['tech_storage'] for u in Plants_merged['Technology']]]
     # check storage plants:
     check_sto(config, Plants_sto,raw_data=False)
     # Defining the CHPs:
+    
     Plants_chp = Plants_merged[[x.lower() in commons['types_CHP'] for x in Plants_merged['CHPType']]].copy()
+    
     # check chp plants:
     check_chp(config, Plants_chp)
     # For all the chp plants correct the PowerCapacity, which is defined in cogeneration mode in the inputs and in power generation model in the optimization model
+  
     for u in Plants_chp.index:
         PowerCapacity = Plants_chp.loc[u, 'PowerCapacity']
 
@@ -245,7 +390,9 @@ def build_simulation(config,plot_load=False):
                 MaxHeat = Plants_chp.loc[u, 'CHPMaxHeat']
             PurePowerCapacity = PowerCapacity + Plants_chp.loc[u,'CHPPowerLossFactor'] * MaxHeat
         Plants_merged.loc[u,'PartLoadMin'] = Plants_merged.loc[u,'PartLoadMin'] * PowerCapacity / PurePowerCapacity  # FIXME: Is this correct?
+        
         Plants_merged.loc[u,'PowerCapacity'] = PurePowerCapacity
+        
         
     # Get the hydro time series corresponding to the original plant list:
     StorageFormerIndexes = [s for s in plants.index if
@@ -262,16 +409,97 @@ def build_simulation(config,plot_load=False):
         if oldname not in HeatDemand:
             logging.warn('No heat demand profile found for CHP plant "' + str(oldname) + '". Assuming zero')
             HeatDemand[oldname] = 0
-        if oldname not in CostHeatSlack:
-            logging.warn('No heat cost profile found for CHP plant "' + str(oldname) + '". Assuming zero')
-            CostHeatSlack[oldname] = 0
- 
+#        if oldname not in CostHeatSlack:
+#            logging.warn('No heat cost profile found for CHP plant "' + str(oldname) + '". Assuming zero')
+#            CostHeatSlack[oldname] = 0
+            
+            
+            
+            
+ #__________________________%% Modification %% __________________________________
+ #########################%% District heating  %% ################################# 
+    HeatDemandDH = DHBasedTable(DHplants,config_heat['HeatDemandDH'],idx_utc_noloc,config['countries'],tablename='HeatDemandDH')
+    T_outDH = DHBasedTable(DHplants,config_heat['T_outDH'],idx_utc_noloc,config['countries'],tablename='T_outDH')
+    CostHeatSlack = DHBasedTable(DHplants,config['CostHeatSlack'],idx_utc_noloc,config['countries'],tablename='CostHeatSlack',default=config['default']['CostHeatSlack'])
+    # Merging of data with Distrct Heating index
+    DHPlants_merged,Plants_merged,HPPlants_merged, DHmapping, HPmapping = DHclustering(DHplants,Plants_merged,HPplants, method=config['SimulationType'])
+    T_outDH_merged = DHmerge_series(DHplants, T_outDH, DHmapping, tablename='T_outDH')
+    HeatDemandDH_merged = DHmerge_series(DHplants, HeatDemandDH, DHmapping, tablename='HeatDemandDH')
+    CostHeatSlack_merged = DHmerge_series(DHplants, CostHeatSlack, DHmapping, tablename='CostHeatSlack')
+    
+    #Create a whole year index
+    idx_std_year = pd.DatetimeIndex(start=pd.datetime(*(2015, 1, 1, 0, 0, 0)), end=pd.datetime(*(2015, 12, 31, 0, 0, 0)),
+                               freq=commons['TimeStep'])
+    idx_utc_noloc_year = idx_std_year - dt.timedelta(hours=1)
+    idx_utc_year = idx_utc_noloc_year.tz_localize('UTC')
+    
+    
+    a=0
+      # Load scaling
+    Load_year=NodeBasedTable(config['Demand'],idx_utc_noloc_year,config['countries'],tablename='Demand')
+    a=Load_year.sum().sum()
+    if config_heat['modifiers']['Load_year']:
+        a=Load_year.sum().sum()*10**(-6)/config_heat['modifiers']['Load_year']
+        Load=Load/a
+    a=0
+    HeatDemandDH_year = DHBasedTable(DHplants,config_heat['HeatDemandDH'],idx_utc_noloc_year,config['countries'],tablename='HeatDemandDH')
+    if config_heat['modifiers']['HeadDemandTotal']*config_heat['modifiers']['PartDH'] !=0:
+        a=HeatDemandDH_year.sum().sum()*10**(-6)/(config_heat['modifiers']['HeadDemandTotal']*config_heat['modifiers']['PartDH'])
+        HeatDemandDH_merged=HeatDemandDH_merged/a
+    else:
+        HeatDemandDH_merged=HeatDemandDH_merged*0
+        
+ #########################%% Temperature  %% #################################
+    
+    T_supply =DHPlants_merged['T_hot_water'] + DHPlants_merged['T_pinch']
+    T_return =DHPlants_merged['T_space_heating'] + DHPlants_merged['T_pinch']
+    T_gen_in = T_return
+    T_gen_out = DHPlants_merged['T_gen_out']
+    CP_w = DHPlants_merged['T_gen_out']*0+4185 #Hypothesis that water is used for every heat carry
 
-    # merge the outages:
-    for i in plants.index:  # for all the old plant indexes
-        # get the old plant name corresponding to s:
-        oldname = plants['Unit'][i]
-        newname = mapping['NewIndex'][i]
+#########################%% Heat pumps  %% #################################
+    #COP_unit is temperature dependant, T between [0 100], and is derived from the file 'COP.csv'
+    #which contains the COP for each type of HP
+    #COP is depending on the time step given in the configuration file.
+    #COP_fix is for the case of a HP working on fixed output temperature
+    #it is time dependant for the case if the heat source is ambiant air
+    #HP_model -- Must be coupled with COP and temperature file to give the specific COP
+    #Capacity -- database (DH)
+    #Ramp up -- database (DH)
+    #Ramp down -- database (DH)
+    #THP_source  --  (h,DH)
+     
+    COP_data = pd.read_csv(config_heat['COP'], header=0, skiprows=[], skip_footer=0, index_col=None, parse_dates=False)
+    #------------------COP unit--------------------
+    COP_unit=pd.DataFrame(index=COP_data.index)
+    for u in HPPlants_merged.index:
+        COP_unit[u]=COP_data[HPPlants_merged['HPModel'][u]]
+    
+    
+
+    #------------------COP fix--------------------    
+    COP_fix=pd.DataFrame(index=T_outDH_merged.index)
+    for u in HPPlants_merged.index:
+        dh=HPPlants_merged['DH'][u]
+        COP_fix[u]=0.
+        if np.isnan([HPPlants_merged['T_HP_source'][u]]):
+            for h in range(len(T_outDH_merged[dh])):
+                COP_fix[u][h] =COP_unit[u][HPPlants_merged['T_HP_out'][u]-int(T_outDH_merged[dh][h]+0.5)]
+        else:
+            COP_fix[u] =COP_unit[u][HPPlants_merged['T_HP_out'][u]-HPPlants_merged['T_HP_source'][u]]            
+
+    
+    
+    
+#########################%% Thermal Storage  %% #################################
+    #capacity --database
+    #Ramp up--database
+    #rampDown--database
+    #Self discharge--database
+    
+
+
+#_______________________________________________________________________________
 
     # Merging the time series relative to the clustered power plants:
     ReservoirScaledInflows_merged = merge_series(plants, ReservoirScaledInflows, mapping, method='WeightedAverage', tablename='ScaledInflows')
@@ -279,8 +507,9 @@ def build_simulation(config,plot_load=False):
     Outages_merged = merge_series(plants, Outages, mapping, tablename='Outages')
     HeatDemand_merged = merge_series(plants, HeatDemand, mapping, tablename='HeatDemand',method='Sum')
     AF_merged = merge_series(plants, AF, mapping, tablename='AvailabilityFactors')
-    CostHeatSlack_merged = merge_series(plants, CostHeatSlack, mapping, tablename='CostHeatSlack')
-    
+     
+
+        
 
     # %%
     # checking data
@@ -314,9 +543,41 @@ def build_simulation(config,plot_load=False):
     enddate_long = idx_utc_noloc[-1] + dt.timedelta(days=config['LookAhead'])
     idx_long = pd.DatetimeIndex(start=idx_utc_noloc[0], end=enddate_long, freq=commons['TimeStep'])
     Nhours_long = len(idx_long)
-
-    # re-indexing with the longer index and filling possibly missing data at the beginning and at the end::
+    
+# re-indexing with the longer index and filling possibly missing data at the beginning and at the end::
     Load = Load.reindex(idx_long, method='nearest').fillna(method='bfill')
+ #__________________________%% Modification %% __________________________________
+     
+    HeatDemandDH_merged=HeatDemandDH_merged.reindex(idx_long, method='nearest').fillna(method='bfill')
+    T_outDH_merged=T_outDH_merged.reindex(idx_long, method='nearest').fillna(method='bfill')
+    COP_fix=COP_fix.reindex(idx_long, method='nearest').fillna(method='bfill')
+    
+    for u in DHPlants_merged.index:
+        T_outDH_merged[u][0]=T_outDH_merged[u][1]
+        HeatDemandDH_merged[u][0]=HeatDemandDH_merged[u][1]
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+#    DHDemand = DHDemand.reindex(idx_long, method='nearest').fillna(method='bfill') 
+#    PHDemand = PHDemand.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_out = T_out.reindex(idx_long, method='nearest').fillna(method='bfill')
+##    COP = COP.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_diff = T_diff.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    cp_w = cp_w.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_hw = T_hw.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_sh = T_sh.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_supply = T_supply.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_return = T_return.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_chp = T_chp.reindex(idx_long, method='nearest').fillna(method='bfill')
+#    T_gen_in = T_gen_in.reindex(idx_long, method='nearest').fillna(method='bfill')
+#
+##    CostHeatSlack = CostHeatSlack.reindex(idx_long, method='nearest').fillna(method='bfill')
+##_______________________________________________________________________________
+
     AF_merged = AF_merged.reindex(idx_long, method='nearest').fillna(method='bfill')
     Inter_RoW = Inter_RoW.reindex(idx_long, method='nearest').fillna(method='bfill')
     NTCs = NTCs.reindex(idx_long, method='nearest').fillna(method='bfill')
@@ -331,6 +592,8 @@ def build_simulation(config,plot_load=False):
 #    for tr in Renewables:
 #        Renewables[tr] = Renewables[tr].reindex(idx_long, method='nearest').fillna(method='bfill')
 
+    
+    
     # %%################################################################################################################
     ############################################   Sets    ############################################################
     ###################################################################################################################
@@ -349,8 +612,16 @@ def build_simulation(config,plot_load=False):
     sets['chp'] = Plants_chp.index.tolist()
     sets['t'] = commons['Technologies']
     sets['tr'] = commons['tech_renewables']
+    
+ #__________________________%% Modification %% __________________________________
+#    sets['heat_gen'] = Plants_heat.index.tolist()
+    #Discretize the COP for each temperature level
+    sets['dh'] = DHPlants_merged.index.tolist()
+    sets['hp'] = HPPlants_merged.index.tolist()
+    
+    
 
-    ###################################################################################################################
+    # %%##################################################################################################################
     ############################################   Parameters    ######################################################
     ###################################################################################################################
 
@@ -359,12 +630,38 @@ def build_simulation(config,plot_load=False):
 
     # Each parameter is associated with certain sets, as defined in the following list:
     sets_param = {}
+ #__________________________%% Modification %% __________________________________
+
+ #########################%% District heating  %% ################################# 
+    sets_param['HeatDemandDH'] = ['dh','h']
+    sets_param['T_outDH'] = ['dh','h']
+    sets_param['cp_w'] = ['dh']
+    sets_param['Loss_factor'] = ['dh']  #ok
+    sets_param['CostHeatSlack'] = ['dh','h']
+ #########################%% Temperature  %% ################################# 
+    sets_param['T_supply'] = ['dh']
+    sets_param['T_return'] = ['dh']
+    sets_param['T_gen_in'] = ['dh']
+    sets_param['T_HP_out'] = ['hp'] 
+    sets_param['T_gen_out'] = ['dh']  #ok
+ #########################%% Heat pump  %% #################################    
+    sets_param['COP_fix'] = ['hp','h']
+    sets_param['HP_capacity'] = ['hp']  #ok
+    sets_param['HP_RampUp'] = ['hp']    #ok   
+    sets_param['HP_RampDown'] = ['hp']  #ok
+ #########################%% Thermal Storage  %% #################################     
+    sets_param['TESCapacity'] = ['dh']  #ok
+    sets_param['TESRampUp'] = ['dh']  #ok
+    sets_param['TESRampDown'] = ['dh']  #ok
+    sets_param['TESSelfDischarge'] = ['dh']  #ok
+
+ #_______________________________________________________________________________
+
     sets_param['AvailabilityFactor'] = ['u', 'h']
     sets_param['CHPPowerToHeat'] = ['chp']
     sets_param['CHPPowerLossFactor'] = ['chp']
     sets_param['CHPMaxHeat'] = ['chp']
     sets_param['CostFixed'] = ['u']
-    sets_param['CostHeatSlack'] = ['chp','h']
     sets_param['CostLoadShedding'] = ['n','h']
     sets_param['CostRampUp'] = ['u']
     sets_param['CostRampDown'] = ['u']
@@ -474,7 +771,49 @@ def build_simulation(config,plot_load=False):
     for i, u in enumerate(sets['chp']):
         if u in HeatDemand_merged:
             parameters['HeatDemand']['val'][i, :] = HeatDemand_merged[u][idx_long].values 
-            parameters['CostHeatSlack']['val'][i, :] = CostHeatSlack_merged[u][idx_long].values
+            
+    
+ #%%__________________________%% Modification %% __________________________________
+    
+    for var in ['Loss_factor','T_gen_out','TESCapacity','TESSelfDischarge']:
+        parameters[var]['val'] = DHPlants_merged[var].values
+    parameters['TESRampUp']['val']=DHPlants_merged['TESRampUp'].values*DHPlants_merged['TESCapacity'].values
+    parameters['TESRampDown']['val']=DHPlants_merged['TESRampDown'].values*DHPlants_merged['TESCapacity'].values
+    for var in ['T_HP_out','HP_capacity']:
+        parameters[var]['val'] = HPPlants_merged[var].values
+    parameters['HP_RampUp']['val']=HPPlants_merged['HP_RampUp'].values*HPPlants_merged['HP_capacity'].values
+    parameters['HP_RampDown']['val']=HPPlants_merged['HP_RampDown'].values*HPPlants_merged['HP_capacity'].values
+    for i, u in enumerate(sets['hp']):
+        if u in COP_fix:
+                parameters['COP_fix']['val'][i, :] = COP_fix[u][idx_long].values
+    for i, u in enumerate(sets['dh']):
+        if u in HeatDemandDH_merged:
+            parameters['HeatDemandDH']['val'][i, :] = HeatDemandDH_merged[u][idx_long].values
+        if u in T_outDH_merged:
+            parameters['T_outDH']['val'][i, :] = T_outDH_merged[u][idx_long].values
+        
+        parameters['cp_w']['val'][i]=CP_w[u]
+        parameters['T_supply']['val'][i]=T_supply[u]
+        parameters['T_return']['val'][i]=T_return[u]
+        parameters['T_gen_in']['val'][i]=T_gen_in[u]
+        parameters['CostHeatSlack']['val'][i, :] = CostHeatSlack_merged[u][idx_long].values
+
+    parameters['DH_index'] = define_parameter(['chp','dh'],sets,value=0)
+    for i,u in enumerate(sets['chp']):
+        if u in Plants_chp.index:
+            for j,k in enumerate(sets['dh']):
+                if Plants_merged['DH'][u] == DHPlants_merged.index.tolist()[j]:
+                    parameters['DH_index']['val'][i,j] = 1
+    parameters['HP_index'] = define_parameter(['hp','dh'],sets,value=0)
+    for i,u in enumerate(sets['hp']):
+        if u in HPPlants_merged.index:
+            for j,k in enumerate(sets['dh']):
+                if HPPlants_merged['DH'][u] == DHPlants_merged.index.tolist()[j]:
+                    parameters['HP_index']['val'][i,j] = 1
+
+
+ #%%_______________________________________________________________________________
+
 
     # Ramping rates are reconstructed for the non dimensional value provided (start-up and normal ramping are not differentiated)
     parameters['RampUpMaximum']['val'] = Plants_merged['RampUpRate'].values * Plants_merged['PowerCapacity'].values * 60
@@ -590,7 +929,14 @@ def build_simulation(config,plot_load=False):
             else:
                 logging.error('CHPType not valid for plant ' + u)
                 sys.exit(1)
+    
 
+   
+
+    
+    
+    
+    
     # Initial Power
     if 'InitialPower' in Plants_merged:
         parameters['PowerInitial']['val'] = Plants_merged['InitialPower'].values
@@ -620,10 +966,11 @@ def build_simulation(config,plot_load=False):
 
     # Output folder: 
     sim = config['SimulationDirectory']
-
+#__________________________%% Modification %% __________________________________
+    #Add DHPlants_merged
     # Simulation data:
-    SimData = {'sets': sets, 'parameters': parameters, 'config': config, 'units': Plants_merged, 'version': dispa_version}
-
+    SimData = {'sets': sets, 'parameters': parameters, 'config': config, 'units': Plants_merged,'DHunits': DHPlants_merged,'HPunits': HPPlants_merged, 'version': dispa_version}
+#_______________________________________________________________________________
     # list_vars = []
     gdx_out = "Inputs.gdx"
     if config['WriteGDX']:
@@ -703,6 +1050,7 @@ def build_simulation(config,plot_load=False):
     return SimData
 
 
+<<<<<<< Updated upstream
 def build_simulation_heat(config,plot_load=False):
     """
     This function reads the DispaSET config, loads the specified data,
@@ -1451,6 +1799,8 @@ def build_simulation_heat(config,plot_load=False):
 
     return SimData_heat
 
+=======
+>>>>>>> Stashed changes
 
 def adjust_capacity(inputs,tech_fuel,scaling=1,value=None,singleunit=False,write_gdx=False,dest_path=''):
     '''

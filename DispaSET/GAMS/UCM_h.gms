@@ -70,7 +70,12 @@ h                Hours
 i(h)             Subset of simulated hours for one iteration
 z(h)             Subset of all simulated hours
 ************************************Modification********************************
+<<<<<<< Updated upstream
 heat_gen(u)          Heat generation units
+=======
+dh
+hp
+>>>>>>> Stashed changes
 ********************************************************************************
 ;
 
@@ -90,10 +95,37 @@ Alias(i,ii);
 PARAMETERS
 
 ************************************Modification********************************
+<<<<<<< Updated upstream
 DHDemand(h)                      [MWh\u]  Heat demand profile for chp units
 PHDemand(h)                      [MWh\u]  Heat demand profile for chp units
 HEATType
 COP(u,h)                         []      COP
+=======
+*District heating
+DH_index
+HeatDemandDH(dh,h)
+T_outDH(dh,h)
+cp_w(dh)
+Loss_factor(dh)
+CostHeatSlack(dh,h)             [EUR\MWh]  Cost of supplying heat via other means
+*Temperature
+T_supply(dh)
+T_return(dh)
+T_gen_in(dh)
+T_gen_out(dh)
+T_HP_out(hp)
+*Heat pump
+HP_index
+COP_fix(hp,h)
+HP_capacity(hp)
+HP_RampUp(hp)
+HP_RampDown(hp)
+*Thermal Storage
+TESCapacity(dh)
+TESRampUp(dh)
+TESRampDown(dh)
+TESSelfDischarge(dh)
+>>>>>>> Stashed changes
 ********************************************************************************
 AvailabilityFactor(u,h)          [%]      Availability factor
 CHPPowerLossFactor(u)            [%]      Power loss when generating heat
@@ -109,7 +141,6 @@ CostRampDown(u)                  [EUR\MW\h] Ramp-down costs
 CostShutDown(u)                  [EUR\u]    Shut-down costs
 CostStartUp(u)                   [EUR\u]    Start-up costs
 CostVariable(u,h)                [EUR\MW]   Variable costs
-CostHeatSlack(chp,h)             [EUR\MWh]  Cost of supplying heat via other means
 CostLoadShedding(n,h)            [EUR\MWh] Cost of load shedding
 Curtailment(n)                   [n.a]    Curtailment allowed or not {1 0} at node n
 Demand(mk,n,h)                   [MW]     Demand
@@ -187,6 +218,35 @@ $LOAD s
 $LOAD chp
 $LOAD h
 $LOAD z
+
+************************************Modification********************************
+$LOAD dh
+$LOAD hp
+*District heating
+$LOAD DH_index
+$LOAD HeatDemandDH
+$LOAD T_outDH
+$LOAD cp_w
+$LOAD Loss_factor
+$LOAD CostHeatSlack
+*Temperature
+$LOAD T_supply
+$LOAD T_return
+$LOAD T_gen_in
+$LOAD T_gen_out
+$LOAD T_HP_out
+*Heat pump
+$LOAD HP_index
+$LOAD COP_fix
+$LOAD HP_capacity
+$LOAD HP_RampUp
+$LOAD HP_RampDown
+*Thermal Storage
+$LOAD TESCapacity
+$LOAD TESRampUp
+$LOAD TESRampDown
+$LOAD TESSelfDischarge
+********************************************************************************
 $LOAD AvailabilityFactor
 $LOAD CHPPowerLossFactor
 $LOAD CHPPowerToHeat
@@ -194,7 +254,6 @@ $LOAD CHPMaxHeat
 $LOAD CHPType
 $LOAD Config
 $LOAD CostFixed
-$LOAD CostHeatSlack
 $LOAD CostLoadShedding
 $LOAD CostShutDown
 $LOAD CostStartUp
@@ -333,10 +392,12 @@ VARIABLES
 Committed(u,h)             [n.a.]  Unit committed at hour h {1 0} or integer
 StartUp(u,h)        [n.a.]  Unit start up at hour h {1 0}  or integer
 ShutDown(u,h)       [n.a.]  Unit shut down at hour h {1 0} or integer
+************************************Modification********************************
+********************************************************************************
 ;
 
 $If %LPFormulation% == 1 POSITIVE VARIABLES Committed (u,h) ; Committed.UP(u,h) = 1 ;
-$If not %LPFormulation% == 1 INTEGER VARIABLES Committed (u,h), StartUp(u,h), ShutDown(u,h) ; Committed.UP(u,h) = Nunits(u) ; StartUp.UP(u,h) = Nunits(u) ; ShutDown.UP(u,h) = Nunits(u) ;
+$If not %LPFormulation% == 1 INTEGER VARIABLES Committed (u,h), StartUp(u,h), ShutDown(u,h); Committed.UP(u,h) = Nunits(u) ; StartUp.UP(u,h) = Nunits(u) ; ShutDown.UP(u,h) = Nunits(u);
 
 POSITIVE VARIABLES
 CostStartUpH(u,h)          [EUR]   Cost of starting up
@@ -364,8 +425,24 @@ Reserve_2U(u,h)            [MW]    Spinning reserve up
 Reserve_2D(u,h)            [MW]    Spinning reserve down
 Reserve_3U(u,h)            [MW]    Non spinning quick start reserve up
 Heat2(chp,h)                [MW]    Heat output by chp plant
+<<<<<<< Updated upstream
 HeatSlack(chp,h)           [MW]    Heat satisfied by other sources
+=======
+************************************Modification********************************
+m_dot_dh(dh,h)          [kg per s]    Mass flow on the district heating side
+m_dot_gen(dh,h)         [kg per s]    Mass flow on the heat generation side
+LOAD_HP(hp,h)                 [MW]    Power consumed by heat pumps
+Q_dot_chp(dh,h)               [MW]    Heat
+Q_dot_dh(dh,h)                [MW]    Heat
+Q_dot_gen(dh,h)               [MW]    Heat
+Q_dot_hp(hp,h)                [MW]    Heat
+Q_sto(dh,h)                   [MW]    Heat
+CostHeatCHP(h)
+HeatSlack(dh,h)           [MW]    Heat satisfied by other sources
+Demand_eff(h)
+>>>>>>> Stashed changes
 ;
+********************************************************************************
 
 free variable
 SystemCostD                ![EUR]   Total system cost for one optimization period
@@ -404,15 +481,33 @@ $offorder
 *Declaration and definition of equations
 *===============================================================================
 EQUATIONS
+************************************Modification********************************
+EQ_CHP_dh
+EQ_DH_dist_1
+EQ_DH_dist_2
+EQ_DH_gen_1
+EQ_DH_gen_2
+EQ_DH_tes_1
+EQ_DH_tes_2
+EQ_DH_tes_3
+EQ_DH_tes_4
+EQ_HP_cop_1
+EQ_HP_cop_2
+EQ_HP_1
+EQ_HP_2
+EQ_HP_3
+EQ_CostHeatCHP
+EQ_effective_demand
+********************************************************************************
 EQ_Objective_function
 EQ_CHP_extraction_Pmax
 EQ_CHP_extraction
 EQ_CHP_backpressure
-EQ_CHP_demand_satisfaction
+*EQ_CHP_demand_satisfaction
 EQ_CHP_max_heat
-EQ_Heat_Storage_balance
-EQ_Heat_Storage_minimum
-EQ_Heat_Storage_level
+*EQ_Heat_Storage_balance
+*EQ_Heat_Storage_minimum
+*EQ_Heat_Storage_level
 EQ_Commitment
 EQ_MinUpTime
 EQ_MinDownTime
@@ -468,8 +563,13 @@ EQ_SystemCost(i)..
          +sum(u,CostVariable(u,i) * Power(u,i))
          +sum(l,PriceTransmission(l,i)*Flow(l,i))
          +sum(n,CostLoadShedding(n,i)*ShedLoad(n,i))
+<<<<<<< Updated upstream
 *         +sum(chp, CostHeatSlack(chp,i) * HeatSlack(chp,i))
          +sum(chp, CostVariable(chp,i) * CHPPowerLossFactor(chp) * Heat2(chp,i))
+=======
+         +sum(dh, CostHeatSlack(dh,i) * HeatSlack(dh,i))
+         +sum(chp, CostVariable(chp,i) * CHPPowerLossFactor(chp) * StorageInput(chp,i))
+>>>>>>> Stashed changes
          +100E3*(sum(n,LL_MaxPower(n,i)+LL_MinPower(n,i)))
          +80E3*(sum(n,LL_2U(n,i)+LL_2D(n,i)+LL_3U(n,i)))
          +70E3*sum(u,LL_RampUp(u,i)+LL_RampDown(u,i))
@@ -555,7 +655,27 @@ EQ_Demand_balance_DA(n,i)..
          -ShedLoad(n,i)
          -LL_MaxPower(n,i)
          +LL_MinPower(n,i)
+************************************Modification********************************
+         +sum(hp,LOAD_HP(hp,i))
+********************************************************************************
 ;
+
+************************************Modification********************************
+EQ_effective_demand(i)..
+         sum(n,sum(u,Power(u,i)*Location(u,n))
+          +sum(l,Flow(l,i)*LineNode(l,n)))
+         =E=
+         Demand_eff(i)
+;
+EQ_CostHeatCHP(i)..
+*         sum(dh,LOAD_HP(dh,i))/(sum(n,sum(u,Power(u,i)*Location(u,n))
+*         +sum(l,Flow(l,i)*LineNode(l,n))))*SystemCost(i)
+         sum(dh, CostHeatSlack(dh,i) * HeatSlack(dh,i))
+         +sum(chp, CostVariable(chp,i) * CHPPowerLossFactor(chp) * StorageInput(chp,i))
+         =E=
+         CostHeatCHP(i)
+;
+********************************************************************************
 
 *Hourly demand balance in the upwards spinning reserve market for each node
 EQ_Demand_balance_2U(n,i)..
@@ -715,14 +835,21 @@ EQ_LoadShedding(n,i)..
          LoadShedding(n,i)
 ;
 
-* CHP units:
+
+
+********************************************************************************
+************************************Modification********************************
+********************************************************************************
+*===============================================================================
+*CHP units
+*===============================================================================
 EQ_CHP_extraction(chp,i)$(CHPType(chp,'Extraction'))..
          Power(chp,i)
          =G=
          StorageInput(chp,i) * CHPPowerToHeat(chp)
 ;
 
-EQ_CHP_extraction_Pmax(chp,i)$(CHPType(chp,'Extraction') or CHPType(chp,'P2H'))..
+EQ_CHP_extraction_Pmax(chp,i)$(CHPType(chp,'Extraction'))..
          Power(chp,i)
          =L=
          PowerCapacity(chp)*Nunits(chp)  - StorageInput(chp,i) * CHPPowerLossFactor(chp)
@@ -740,53 +867,166 @@ EQ_CHP_max_heat(chp,i)..
          CHPMaxHeat(chp)*Nunits(chp)
 ;
 
+<<<<<<< Updated upstream
 EQ_CHP_demand_satisfaction(chp,i)..
          Heat2(chp,i)
 *         + HeatSlack(chp,i)
+=======
+EQ_CHP_dh(chp,dh,i)$(DH_index(chp,dh))..
+*         sum(chp,StorageInput(chp,i))
+         StorageInput(chp,i)
+>>>>>>> Stashed changes
          =E=
-         HeatDemand(chp,i)
+         Q_dot_chp(dh,i)
 ;
+********************************************************************************
+************************************Modification DH********************************
+********************************************************************************
 
-*Heat Storage balance
-EQ_Heat_Storage_balance(chp,i)..
-          StorageInitial(chp)$(ord(i) = 1)
-         +StorageLevel(chp,i-1)$(ord(i) > 1)
-         +StorageInput(chp,i)
+
+*===============================================================================
+*District heating distribution side
+*===============================================================================
+
+EQ_DH_dist_1(dh,i)..
+         m_dot_dh(dh,i)*cp_w(dh)*(T_supply(dh)-T_return(dh))*(1-Loss_Factor(dh))
          =E=
+         Q_dot_dh(dh,i)
+;
+EQ_DH_dist_2(dh,i)..
+         HeatDemandDH(dh,i)
+         =E=
+<<<<<<< Updated upstream
          StorageLevel(chp,i)
          +Heat2(chp,i) + StorageSelfDischarge(chp) * StorageLevel(chp,i)/24
+=======
+         Q_dot_dh(dh,i)
+>>>>>>> Stashed changes
 ;
-* The self-discharge proportional to the charging level is a bold hypothesis, but it avoids keeping self-discharging if the level reaches zero
 
-*Storage level must be above a minimum
-EQ_Heat_Storage_minimum(chp,i)..
-         StorageMinimum(chp)*Nunits(chp)
+*===============================================================================
+*District heating generation side
+*===============================================================================
+EQ_DH_gen_1(dh,i)..
+         m_dot_gen(dh,i)*cp_w(dh)*(T_supply(dh)-T_return(dh))
+         =E=
+         Q_dot_gen(dh,i)
+;
+EQ_DH_gen_2(dh,i)..
+         sum(hp,Q_dot_hp(hp,i)$(HP_index(hp,dh)))
+         +Q_dot_chp(dh,i)
+         +HeatSlack(dh,i)
+         =E=
+         Q_dot_gen(dh,i)
+;
+*===============================================================================
+*District heating storage
+*===============================================================================
+EQ_DH_tes_1(dh,i)..
+         Q_dot_gen(dh,i)
+         +Q_sto(dh,i-1)$(ord(i) > 1)
+         =E=
+         Q_dot_dh(dh,i)
+         +Q_sto(dh,i)
+         +(TESSelfDischarge(dh)*Q_sto(dh,i-1))$(ord(i) > 1)
+;
+EQ_DH_tes_2(dh,i)..
+         Q_sto(dh,i)
          =L=
-         StorageLevel(chp,i)
+         TESCapacity(dh)
 ;
-
-*Storage level must below storage capacity
-EQ_Heat_Storage_level(chp,i)..
-         StorageLevel(chp,i)
+EQ_DH_tes_3(dh,i)..
+         Q_sto(dh,i)
+         -Q_sto(dh,i-1)$(ord(i) > 1)
          =L=
-         StorageCapacity(chp)*Nunits(chp)
+         TESRampUp(dh)
+;
+EQ_DH_tes_4(dh,i)..
+         Q_sto(dh,i-1)$(ord(i) > 1)
+         -Q_sto(dh,i)
+         =L=
+         TESRampDown(dh)
 ;
 
-* Minimum level at the end of the optimization horizon:
-*EQ_Heat_Storage_boundaries(chp,i)$(ord(i) = card(i))..
-*         StorageFinalMin(chp)
-*         =L=
-*         StorageLevel(chp,i)
-*;
+*===============================================================================
+
+
+$If %COP_variable_Formulation% == 1 $goto skipCOPfix
+*===============================================================================
+*COP fixe
+*===============================================================================
+
+
+EQ_HP_cop_1(hp,i)..
+         LOAD_HP(hp,i)
+         =E=
+         Q_dot_hp(hp,i)/(COP_fix(hp,i))
+;
+
+EQ_HP_cop_2(dh,hp,i)$(HP_index(hp,dh))..
+         Q_dot_hp(hp,i)
+         +Q_dot_hp(hp-1,i)$(ord(hp) > 1)
+         +Q_dot_hp(hp-2,i)$(ord(hp) > 2)
+         +Q_dot_hp(hp-3,i)$(ord(hp) > 3)
+         +Q_dot_hp(hp-4,i)$(ord(hp) > 4)
+         +Q_dot_hp(hp-5,i)$(ord(hp) > 5)
+         +Q_dot_hp(hp-6,i)$(ord(hp) > 6)
+         +Q_dot_hp(hp-7,i)$(ord(hp) > 7)
+         =L=
+         (T_hp_out(hp)-T_gen_in(dh))/(T_gen_out(dh)-T_gen_in(dh))* Q_dot_gen(dh,i)
+
+;
+
+$label skipCOPfix
+*===============================================================================
+
+
+
+*===============================================================================
+*HP
+*===============================================================================
+EQ_HP_1(hp,i)..
+         Q_dot_hp(hp,i)
+         =L=
+         HP_capacity(hp)
+;
+EQ_HP_2(hp,i)..
+         Q_dot_hp(hp,i)-Q_dot_hp(hp,i-1)$(ord(i) > 1)
+         =L=
+         HP_RampUp(hp)
+;
+EQ_HP_3(hp,i)..
+         Q_dot_hp(hp,i-1)$(ord(i) > 1)-Q_dot_hp(hp,i)
+         =L=
+         HP_RampDown(hp)
+;
+
 *===============================================================================
 *Definition of models
 *===============================================================================
 MODEL UCM_SIMPLE /
+************************************Modification********************************
+EQ_CHP_dh,
+EQ_DH_dist_1,
+EQ_DH_dist_2,
+EQ_DH_gen_1,
+EQ_DH_gen_2,
+EQ_DH_tes_1,
+EQ_DH_tes_2,
+EQ_DH_tes_3,
+EQ_DH_tes_4,
+EQ_HP_cop_1,
+EQ_HP_cop_2,
+EQ_HP_1,
+EQ_HP_2,
+EQ_HP_3,
+EQ_CostHeatCHP,
+EQ_effective_demand,
+********************************************************************************
 EQ_Objective_function,
 EQ_CHP_extraction_Pmax,
 EQ_CHP_extraction,
 EQ_CHP_backpressure,
-EQ_CHP_demand_satisfaction,
 EQ_CHP_max_heat,
 $If not %LPFormulation% == 1 EQ_CostStartUp,
 $If not %LPFormulation% == 1 EQ_CostShutDown,
@@ -803,9 +1043,9 @@ EQ_Demand_balance_2D,
 EQ_Demand_balance_3U,
 $If not %LPFormulation% == 1 EQ_Power_must_run,
 EQ_Power_available,
-EQ_Heat_Storage_balance,
-EQ_Heat_Storage_minimum,
-EQ_Heat_Storage_level,
+*EQ_Heat_Storage_balance,
+*EQ_Heat_Storage_minimum,
+*EQ_Heat_Storage_level,
 EQ_Reserve_2U_capability,
 EQ_Reserve_2D_capability,
 EQ_Reserve_3U_capability,
@@ -903,8 +1143,18 @@ $If %Verbose% == 1 Display Flow.L,Power.L,Committed.L,ShedLoad.L,CurtailedPower.
 *===============================================================================
 
 PARAMETER
+************************************Modification********************************
+OutputQ_dot_hp(hp,h)
+OutputQ_dot_chp(dh,h)
+OutputQ_dot_gen(dh,h)
+OutputQ_dot_dh(dh,h)
+OutputQ_sto(dh,h)
+OutputLOAD_HP(hp,h)
+OutputCostHeatCHP(h)
+OutputDemand_eff(h)
+********************************************************************************
 OutputCommitted(u,h)
-OutputHeat(chp,h)
+*OutputHeat(chp,h)
 OutputFlow(l,h)
 OutputPower(u,h)
 OutputStorageInput(u,h)
@@ -923,14 +1173,32 @@ LostLoad_RampUp(n,h)
 LostLoad_RampDown(n,h)
 OutputGenMargin(n,h)
 OutputHeat(chp,h)
+<<<<<<< Updated upstream
 *OutputHeatSlack(chp,h)
+=======
+OutputHeatSlack(dh,h)
+>>>>>>> Stashed changes
 ;
-
+************************************Modification********************************
+OutputQ_dot_hp(hp,z)=Q_dot_hp.L(hp,z);
+OutputQ_dot_chp(dh,z)=Q_dot_chp.L(dh,z);
+OutputQ_dot_gen(dh,z)=Q_dot_gen.L(dh,z);
+OutputQ_dot_dh(dh,z)=Q_dot_dh.L(dh,z);
+OutputQ_sto(dh,z)=Q_sto.L(dh,z);
+OutputLOAD_HP(hp,z)=LOAD_HP.L(hp,z);
+OutputCostHeatCHP(z)=CostHeatCHP.L(z);
+OutputDemand_eff(z)=Demand_eff.L(z);
+********************************************************************************
 OutputCommitted(u,z)=Committed.L(u,z);
 OutputFlow(l,z)=Flow.L(l,z);
 OutputPower(u,z)=Power.L(u,z);
+<<<<<<< Updated upstream
 OutputHeat(chp,z)=Heat2.L(chp,z);
 *OutputHeatSlack(chp,z)=HeatSlack.L(chp,z);
+=======
+*OutputHeat(chp,z)=Heat2.L(chp,z);
+OutputHeatSlack(dh,z)=HeatSlack.L(dh,z);
+>>>>>>> Stashed changes
 OutputStorageInput(s,z)=StorageInput.L(s,z);
 OutputStorageInput(chp,z)=StorageInput.L(chp,z);
 OutputStorageLevel(s,z)=StorageLevel.L(s,z);
@@ -949,11 +1217,26 @@ LostLoad_RampDown(n,z)  = sum(u,LL_RampDown.L(u,z)*Location(u,n));
 ShadowPrice(n,z) = EQ_Demand_balance_DA.m(n,z);
 
 EXECUTE_UNLOAD "Results.gdx"
+************************************Modification********************************
+OutputQ_dot_hp,
+OutputQ_dot_chp,
+OutputQ_dot_gen,
+OutputQ_dot_dh,
+OutputQ_sto,
+OutputLOAD_HP,
+OutputCostHeatCHP,
+OutputDemand_eff,
+********************************************************************************
 OutputCommitted,
 OutputFlow,
 OutputPower,
+<<<<<<< Updated upstream
 OutputHeat,
 *OutputHeatSlack,
+=======
+*OutputHeat,
+OutputHeatSlack,
+>>>>>>> Stashed changes
 OutputStorageInput,
 OutputStorageLevel,
 OutputSystemCost,
@@ -996,6 +1279,9 @@ EXECUTE 'GDXXRW.EXE "%inputfilename%" O="Results.xlsx" Squeeze=Y par=OutageFacto
 EXECUTE 'GDXXRW.EXE "%inputfilename%" O="Results.xlsx" Squeeze=N par=Demand rng=Demand!A1 rdim=2 cdim=1'
 EXECUTE 'GDXXRW.EXE "%inputfilename%" O="Results.xlsx" Squeeze=N par=PartLoadMin rng=PartLoadMin!A1 rdim=1 cdim=0'
 
+************************************Modification********************************
+*EXECUTE 'GDXXRW.EXE "Results.gdx" O="Results.xlsx" Squeeze=N par=OutputT_chp_out rng=SystemCost!A1 rdim=1 cdim=0'
+********************************************************************************
 EXECUTE 'GDXXRW.EXE "Results.gdx" O="Results.xlsx" Squeeze=N var=CurtailedPower rng=CurtailedPower!A1 rdim=1 cdim=1'
 EXECUTE 'GDXXRW.EXE "Results.gdx" O="Results.xlsx" Squeeze=N var=ShedLoad rng=ShedLoad!A1 rdim=1 cdim=1'
 EXECUTE 'GDXXRW.EXE "Results.gdx" O="Results.xlsx" Squeeze=N par=OutputCommitted rng=Committed!A1 rdim=1 cdim=1'

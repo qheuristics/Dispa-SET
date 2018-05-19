@@ -298,7 +298,7 @@ def clustering(plants, method='Standard', Nslices=20, PartLoadMax=0.1, Pmax=30):
                     if key in ['PowerCapacity','RampUpRate', 'RampDownRate', 'MinUpTime', 'MinDownTime', 'NoLoadCost', 'Efficiency',
                                'MinEfficiency', 'STOChargingEfficiency', 'CO2Intensity', 'STOSelfDischarge', 
                                'STOCapacity', 'STOMaxChargingPower','InitialPower','PartLoadMin', 'StartUpTime','RampingCost',
-                               'CHPPowerToHeat','CHPPowerLossFactor','CHPMaxHeat']:
+                               'CHPPowerToHeat','CHPPowerLossFactor','CHPMaxHeat','DH']:
                         # Do a weighted average:
                         plants_merged.loc[j, key] = (plants_merged.loc[j,key] * plants_merged.loc[j,'Nunits'] + plants.loc[i,key] * plants.loc[i,'Nunits']) / (plants_merged.loc[j,'Nunits'] + plants.loc[i,'Nunits'])
                 plants_merged.loc[j, 'Nunits'] = plants_merged.loc[j,'Nunits'] + plants.loc[i,'Nunits']
@@ -366,6 +366,239 @@ def clustering(plants, method='Standard', Nslices=20, PartLoadMax=0.1, Pmax=30):
     else:
         logging.warn('Did not cluster any unit')
     return plants_merged, mapping
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def DHclustering(DHplants,plants_merged,HPplants, method='Standard', Nslices=20, PartLoadMax=0.1, Pmax=30):
+    """
+    Merge excessively disaggregated power Units.
+
+    :param DHplants:          Pandas dataframe with each power plant and their characteristics (following the DispaSET format)
+    :param method:          Select DHclustering method ('Standard'/'LP'/None)
+    :param Nslices:         Number of slices used to fingerprint each power plant characteristics. slices in the power plant data to categorize them  (fewer slices involves that the DHplants will be aggregated more easily)
+    :param PartLoadMax:     Maximum part-load capability for the unit to be clustered
+    :param Pmax:            Maximum power for the unit to be clustered
+    :return:                A list with the merged DHplants and the mapping between the original and merged units
+    """
+
+    # Checking the the required columns are present in the input pandas dataframe:
+    required_inputs = ['Unit', 'Zone', 'Loss_factor', 'T_pinch', 'T_hot_water', 'T_space_heating','T_gen_out', 'TESCapacity', 'TESRampUp', 'TESRampDown','TESSelfDischarge']
+    for input in required_inputs:
+        if input not in DHplants.columns:
+            logging.error("The DHplants dataframe requires a '" + input + "' column for DHclustering")
+            sys.exit(1)
+    if not "Nunits" in DHplants:
+        DHplants['Nunits'] = 1
+
+    # Checking the validity of the selected DHclustering method
+    OnlyOnes = (DHplants['Nunits'] == 1).all()
+    if method in ['Standard','MILP']:
+        if not OnlyOnes:
+            logging.warn("The standard (or MILP) DHclustering method is only applicable if all values of the Nunits column in the power plant data are set to one. At least one different value has been encountered. No DHclustering will be applied")
+    elif method == 'LP clustered':
+        if not OnlyOnes:
+            logging.warn("The LP DHclustering method aggregates all the units of the same type. Individual units are not considered")
+            # Modifying the table to remove multiple-units DHplants:
+            for key in ['PowerCapacity', 'STOCapacity', 'STOMaxChargingPower','InitialPower','CHPMaxHeat']:
+                if key in DHplants:
+                    DHplants.loc[:,key] = DHplants.loc[:,'Nunits'] * DHplants.loc[:,key]
+            DHplants['Nunits'] = 1
+            OnlyOnes = True
+    elif method == 'LP':
+        pass
+    elif method == 'Integer DHclustering':
+        pass
+    elif method == 'No DHclustering':
+        pass
+    else:
+        logging.error('Method argument ("' + str(method) + '") not recognized in the DHclustering function')
+        sys.exit(1)
+
+    ####
+    #### File Heat pumps
+    ####
+        # Number of units:
+    Nunits = len(HPplants)
+    HPplants.index = range(Nunits)
+
+    # Definition of the mapping variable, from the old power plant list the new (merged) one:
+    map_old_new = np.zeros(Nunits)
+    map_plant_orig = []
+
+
+    # Definition of the merged power DHplants dataframe:
+    HPplants_merged = pd.DataFrame(columns=HPplants.columns)
+    string_keys = ['Zone', 'HPModel']
+    # First, fill nan values:
+    for key in string_keys:
+        HPplants[key].fillna('',inplace=True)
+
+    for i in HPplants.index:  # i is the plant to be added to the new list
+        merged = False
+
+
+        if not merged:  # Add a new plant in DHplants_merged:
+            HPplants_merged = HPplants_merged.append(HPplants.loc[i], ignore_index=True)
+            HPplants_merged = HPplants_merged.copy()
+            map_plant_orig.append([i])
+            map_old_new[i] = len(map_plant_orig) - 1
+#            fingerprints_merged.append(fingerprints[i])
+
+    Nunits_merged = len(HPplants_merged)
+    mappingHP = {'NewIndex': {}, 'FormerIndexes': {}}
+    #    mapping['NewIdx'] = map_plant_orig
+    #    mapping['OldIdx'] = map_old_new
+    # Modify the Unit names with the original index number. In case of merged DHplants, indicate all indexes + the plant type and fuel
+    for j in range(Nunits_merged):
+        name_temp=HPplants_merged['Unit'][j]
+        if len(map_plant_orig[j]) == 1:  # The plant has not been merged
+            NewName = str(map_plant_orig[j]) + ' - ' + HPplants_merged['Unit'][j]
+            NewName = shrink_to_64(clean_strings(NewName))
+            NewName = NewName.rstrip()                          # remove space at the end because it is not considered by gams
+            HPplants_merged.loc[j, 'Unit'] = NewName
+            mappingHP['FormerIndexes'][NewName] = [map_plant_orig[j][0]]
+            mappingHP['NewIndex'][map_plant_orig[j][0]] = NewName
+        else:
+            all_stringkeys = ''
+            for key in string_keys:
+                all_stringkeys = all_stringkeys + ' - ' + HPplants_merged[key][j]
+            NewName = str(map_plant_orig[j]) + all_stringkeys
+            NewName = shrink_to_64(clean_strings(NewName))
+            NewName = NewName.rstrip()                          # remove space at the end because it is not considered by gams
+            HPplants_merged.loc[j, 'Unit'] = NewName
+            list_oldHPplants = [x for x in map_plant_orig[j]]
+            mappingHP['FormerIndexes'][NewName] = list_oldHPplants
+            for oldplant in list_oldHPplants:
+                mappingHP['NewIndex'][oldplant] = NewName
+    HPplants_merged.index = HPplants_merged['Unit']
+
+
+    ####
+    #### File Heat pumps
+    ####
+
+
+    # Number of units:
+    Nunits = len(DHplants)
+    DHplants.index = range(Nunits)
+
+    # Definition of the mapping variable, from the old power plant list the new (merged) one:
+    map_old_new = np.zeros(Nunits)
+    map_plant_orig = []
+
+
+    # Definition of the merged power DHplants dataframe:
+    DHplants_merged = pd.DataFrame(columns=DHplants.columns)
+    string_keys = ['Zone', 'HPModel']
+    # First, fill nan values:
+    for key in string_keys:
+        DHplants[key].fillna('',inplace=True)
+
+    for i in DHplants.index:  # i is the plant to be added to the new list
+        merged = False
+
+
+        if not merged:  # Add a new plant in DHplants_merged:
+            DHplants_merged = DHplants_merged.append(DHplants.loc[i], ignore_index=True)
+            DHplants_merged = DHplants_merged.copy()
+            map_plant_orig.append([i])
+            map_old_new[i] = len(map_plant_orig) - 1
+#            fingerprints_merged.append(fingerprints[i])
+
+    Nunits_merged = len(DHplants_merged)
+    mapping = {'NewIndex': {}, 'FormerIndexes': {}}
+    #    mapping['NewIdx'] = map_plant_orig
+    #    mapping['OldIdx'] = map_old_new
+    # Modify the Unit names with the original index number. In case of merged DHplants, indicate all indexes + the plant type and fuel
+    for j in range(Nunits_merged):
+        name_temp=DHplants_merged['Unit'][j]
+        if len(map_plant_orig[j]) == 1:  # The plant has not been merged
+            NewName = str(map_plant_orig[j]) + ' - ' + DHplants_merged['Unit'][j]
+            NewName = shrink_to_64(clean_strings(NewName))
+            NewName = NewName.rstrip()                          # remove space at the end because it is not considered by gams
+            DHplants_merged.loc[j, 'Unit'] = NewName
+            mapping['FormerIndexes'][NewName] = [map_plant_orig[j][0]]
+            mapping['NewIndex'][map_plant_orig[j][0]] = NewName
+        else:
+            all_stringkeys = ''
+            for key in string_keys:
+                all_stringkeys = all_stringkeys + ' - ' + DHplants_merged[key][j]
+            NewName = str(map_plant_orig[j]) + all_stringkeys
+            NewName = shrink_to_64(clean_strings(NewName))
+            NewName = NewName.rstrip()                          # remove space at the end because it is not considered by gams
+            DHplants_merged.loc[j, 'Unit'] = NewName
+            list_oldDHplants = [x for x in map_plant_orig[j]]
+            mapping['FormerIndexes'][NewName] = list_oldDHplants
+            for oldplant in list_oldDHplants:
+                mapping['NewIndex'][oldplant] = NewName
+        
+        for i in plants_merged.index:
+            if plants_merged['DH'][i]==name_temp:
+                plants_merged['DH'][i]=NewName
+        for i in HPplants_merged.index:
+            if HPplants_merged['DH'][i]==name_temp:
+                HPplants_merged['DH'][i]=NewName
+    # Transforming the start-up cost into ramping for the DHplants that did not go through any DHclustering:
+    if method == 'LP clustered':
+        for i in range(Nunits_merged):
+            if DHplants_merged['RampingCost'][i] == 0:
+                Power = DHplants_merged['PowerCapacity'][i]
+                Start_up = DHplants_merged['StartUpCost'][i]
+                DHplants_merged.loc[i, 'RampingCost'] = Start_up / Power
+                
+    # Correcting the Nunits field of the clustered DHplants (must be integer):
+    elif method == 'Integer DHclustering':
+        for idx in DHplants_merged.index:
+            N = np.round(DHplants_merged.loc[idx,'Nunits'])
+        for key in ['PowerCapacity', 'STOCapacity', 'STOMaxChargingPower','InitialPower','NoLoadCost']:
+            if key in DHplants_merged.columns:
+                DHplants_merged.loc[idx,key] = DHplants_merged.loc[idx,key] * N / DHplants_merged.loc[idx,'Nunits']
+        DHplants_merged.loc[idx,'Nunits'] = N
+                
+    # Updating the index of the merged DHplants dataframe with the new unit names, after some cleaning:
+    DHplants_merged.index = DHplants_merged['Unit']
+
+    if Nunits != len(DHplants_merged):
+        logging.info('Clustered ' + str(Nunits) + ' original units into ' + str(len(DHplants_merged)) + ' new units')
+    else:
+        logging.warn('Did not cluster any unit')
+    return DHplants_merged,plants_merged,HPplants_merged, mapping,mappingHP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Helpers
 

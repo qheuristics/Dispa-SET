@@ -187,85 +187,7 @@ def UnitBasedTable(plants,path,idx,countries,fallbacks=['Unit'],tablename='',def
         sys.exit(1)        
     return out   
 
-#__________________________%% Modification %% __________________________________
 
-def DHBasedTable(DHplants,path,idx,countries,fallbacks=['Unit'],tablename='',default=None,RestrictWarning=None):
-    '''
-    
-    '''
-              
-    paths = {}
-    if os.path.isfile(path):
-        paths['all'] = path
-        SingleFile=True
-    elif '##' in path:
-        for c in countries:
-            path_c = path.replace('##', str(c))
-            if os.path.isfile(path_c):
-                paths[str(c)] = path_c
-            else:
-                logging.error('No data file found for the table ' + tablename + ' and country ' + c + '. File ' + path_c + ' does not exist')
-                sys.exit(1)
-        SingleFile=False
-    data = pd.DataFrame(index=idx)
-    if len(paths) == 0:
-        logging.info('No data file found for the table ' + tablename + '. Using default value ' + str(default))
-        if default is None:
-            out = pd.DataFrame(index=idx)
-        elif isinstance(default,(float,int)):
-            out = pd.DataFrame(default,index=idx,columns=DHplants['Unit'])
-        else:
-            logging.error('Default value provided for table ' + tablename + ' is not valid')
-            sys.exit(1)
-    else: # assembling the files in a single dataframe:
-        columns = []
-        for c in paths:
-            path = paths[c]
-            tmp = load_csv(path, index_col=0, parse_dates=True)
-            # check that the loaded file is ok:
-            if not tmp.index.is_unique:
-                logging.error('The index of data file ' + path + ' is not unique. Please check the data')
-                sys.exit(1)
-            if SingleFile:
-                for key in tmp:
-                    data[key] = tmp[key]                
-            else:    # use the multi-index header with the country
-                for key in tmp:
-                    columns.append((c,key))
-                    data[c+','+key] = tmp[key]
-        if not SingleFile:
-            data.columns = pd.MultiIndex.from_tuples(columns, names=['Country', 'Data'])
-        # For each plant and each fallback key, try to find the corresponding column in the data
-        out = pd.DataFrame(index=idx)
-        for j in DHplants.index:
-            warning = True
-            if not RestrictWarning is None:
-                warning = False
-                if DHplants.loc[j,'Technology'] in RestrictWarning:
-                    warning=True
-            u = DHplants.loc[j,'Unit']
-            found = False
-            for i,key in enumerate(fallbacks):    
-                if SingleFile:
-                    header = DHplants.loc[j,key]
-                else:
-                    header = (DHplants.loc[j,'Zone'],DHplants.loc[j,key])
-                if header in data:
-                    out[u] = data[header]
-                    found = True
-                    if i > 0 and warning:                        
-                        logging.warn('No specific information was found for unit ' + u + ' in table ' + tablename + '. The generic information for ' + str(header) + ' has been used')
-                    break
-            if not found:
-                if warning:
-                    logging.info('No specific information was found for unit ' + u + ' in table ' + tablename + '. Using default value ' + str(default))
-                if not default is None:
-                    out[u] = default
-    if not out.columns.is_unique:
-        logging.error('The column headers of table "' + tablename + '" are not unique!. The following headers are duplicated: ' + str(out.columns.get_duplicates()))
-        sys.exit(1)        
-    return out   
-#_______________________________________________________________________________
 
 def merge_series(plants, data, mapping, method='WeightedAverage', tablename=''):
     """
@@ -330,147 +252,6 @@ def merge_series(plants, data, mapping, method='WeightedAverage', tablename=''):
                     key) == tuple:  # if the columns header is a tuple, it does not come from the data and has been added by Dispa-SET
                 logging.warn('Column ' + str(key) + ' present in the table "' + tablename + '" not found in the table of power plants. Skipping')
     return merged
-
-
-
-
-
-
-
-def DHmerge_series(DHplants, data, DHmapping, method='Sum', tablename=''):
-    """
-    Function that merges the times series corresponding to the merged units (e.g. outages, inflows, etc.)
-
-    :param DHplants:      Pandas dataframe with the information relative to the original units
-    :param data:        Pandas dataframe with the time series and the original unit names as column header
-    :param DHmapping:     DHmapping between the merged units and the original units. Output of the clustering function
-    :param method:      Select the merging method ('WeightedAverage'/'Sum')
-    :param tablename:   Name of the table being processed (e.g. 'Outages'), used in the warnings
-    :return merged:     Pandas dataframe with the merged time series when necessary
-    """
-    # backward compatibility:
-    if not "Nunits" in DHplants:
-        DHplants['Nunits'] = 1
-
-    DHplants.index = range(len(DHplants))
-    merged = pd.DataFrame(index=data.index)
-    unitnames = [DHplants['Unit'][x] for x in DHmapping['NewIndex']]
-    # First check the data:
-    if not isinstance(data,pd.DataFrame):
-        logging.error('The input "' + tablename + '" to the merge_series function must be a dataframe')
-        sys.exit(1)
-    for key in data:
-        if str(data[key].dtype) not in ['bool','int','float','float16', 'float32', 'float64', 'float128','int8', 'int16', 'int32', 'int64']:
-            logging.critical('The column "' + str(key) + '" of table + "' + tablename + '" is not numeric!')
-    for key in data:
-        if key in unitnames:
-            i = unitnames.index(key)
-            newunit = DHmapping['NewIndex'][i]
-            if newunit not in merged:  # if the columns name is in the DHmapping and the new unit has not been processed yet
-                oldindexes = DHmapping['FormerIndexes'][newunit]
-                oldnames = [DHplants['Unit'][x] for x in oldindexes]
-                if all([name in data for name in oldnames]):
-                    subunits = data[oldnames]
-                else:
-                    for name in oldnames:
-                        if name not in data:
-                            logging.critical('The column "' + name + '" is required for the aggregation of unit "' + key +
-                                             '", but it has not been found in the input data')
-                            sys.exit(1)
-#                value = np.zeros(len(data))
-                # Renaming the subunits df headers with the old plant indexes instead of the unit names:
-                subunits.columns = DHmapping['FormerIndexes'][newunit]
-#                if method == 'WeightedAverage':
-#                    for idx in oldindexes:
-#                        name = DHplants['Unit'][idx]
-##                        value = value + subunits[idx] * np.maximum(1e-9, DHplants['PowerCapacity'][idx]*DHplants['Nunits'][idx])
-#                        value = value
-#                    P_j = np.sum(np.maximum(1e-9, DHplants['PowerCapacity'][oldindexes]*DHplants['Nunits'][oldindexes]))
-#                    merged[newunit] = value / P_j
-                if method == 'Sum':
-                    merged[newunit] = subunits.sum(axis=1)
-                else:
-                    logging.critical('Method "' + str(method) + '" unknown in function MergeSeries')
-                    sys.exit(1)
-        elif key in DHplants['Unit']:
-            if not type(
-                    key) == tuple:  # if the columns header is a tuple, it does not come from the data and has been added by Dispa-SET
-                logging.warn('Column ' + str(key) + ' present in the table "' + tablename + '" not found in the DHmapping between original and clustered units. Skipping')         
-        else:
-            if not type(
-                    key) == tuple:  # if the columns header is a tuple, it does not come from the data and has been added by Dispa-SET
-                logging.warn('Column ' + str(key) + ' present in the table "' + tablename + '" not found in the table of power DHplants. Skipping')
-    return merged
-
-
-def DH2merge_series(DHplants, data, DHmapping, method='Sum', tablename=''):
-    """
-    Function that merges the times series corresponding to the merged units (e.g. outages, inflows, etc.)
-
-    :param DHplants:      Pandas dataframe with the information relative to the original units
-    :param data:        Pandas dataframe with the time series and the original unit names as column header
-    :param DHmapping:     DHmapping between the merged units and the original units. Output of the clustering function
-    :param method:      Select the merging method ('WeightedAverage'/'Sum')
-    :param tablename:   Name of the table being processed (e.g. 'Outages'), used in the warnings
-    :return merged:     Pandas dataframe with the merged time series when necessary
-    """
-    # backward compatibility:
-    if not "Nunits" in DHplants:
-        DHplants['Nunits'] = 1
-
-    DHplants.index = range(len(DHplants))
-    merged = pd.DataFrame(index=data.index)
-    unitnames = [DHplants['Unit'][x] for x in DHmapping['NewIndex']]
-    # First check the data:
-    if not isinstance(data,pd.DataFrame):
-        logging.error('The input "' + tablename + '" to the merge_series function must be a dataframe')
-        sys.exit(1)
-    for key in data:
-        if str(data[key].dtype) not in ['bool','int','float','float16', 'float32', 'float64', 'float128','int8', 'int16', 'int32', 'int64']:
-            logging.critical('The column "' + str(key) + '" of table + "' + tablename + '" is not numeric!')
-    for key in data:
-        if key in unitnames:
-            i = unitnames.index(key)
-            newunit = DHmapping['NewIndex'][i]
-            if newunit not in merged:  # if the columns name is in the DHmapping and the new unit has not been processed yet
-                oldindexes = DHmapping['FormerIndexes'][newunit]
-                oldnames = [DHplants['Unit'][x] for x in oldindexes]
-                if all([name in data for name in oldnames]):
-                    subunits = data[oldnames]
-                else:
-                    for name in oldnames:
-                        if name not in data:
-                            logging.critical('The column "' + name + '" is required for the aggregation of unit "' + key +
-                                             '", but it has not been found in the input data')
-                            sys.exit(1)
-#                value = np.zeros(len(data))
-                # Renaming the subunits df headers with the old plant indexes instead of the unit names:
-                subunits.columns = DHmapping['FormerIndexes'][newunit]
-#                if method == 'WeightedAverage':
-#                    for idx in oldindexes:
-#                        name = DHplants['Unit'][idx]
-##                        value = value + subunits[idx] * np.maximum(1e-9, DHplants['PowerCapacity'][idx]*DHplants['Nunits'][idx])
-#                        value = value
-#                    P_j = np.sum(np.maximum(1e-9, DHplants['PowerCapacity'][oldindexes]*DHplants['Nunits'][oldindexes]))
-#                    merged[newunit] = value / P_j
-                if method == 'Sum':
-                    merged[newunit] = subunits.sum(axis=1)
-                else:
-                    logging.critical('Method "' + str(method) + '" unknown in function MergeSeries')
-                    sys.exit(1)
-        elif key in DHplants['Unit']:
-            if not type(
-                    key) == tuple:  # if the columns header is a tuple, it does not come from the data and has been added by Dispa-SET
-                logging.warn('Column ' + str(key) + ' present in the table "' + tablename + '" not found in the DHmapping between original and clustered units. Skipping')         
-        else:
-            if not type(
-                    key) == tuple:  # if the columns header is a tuple, it does not come from the data and has been added by Dispa-SET
-                logging.warn('Column ' + str(key) + ' present in the table "' + tablename + '" not found in the table of power DHplants. Skipping')
-    return merged
-
-
-
-
 
 
 def define_parameter(sets_in, sets, value=0):
@@ -761,16 +542,9 @@ def load_config_excel(ConfigFile):
     config['modifiers']['Wind'] = sheet.cell_value(112, 2)
     config['modifiers']['Solar'] = sheet.cell_value(113, 2)
     config['modifiers']['Storage'] = sheet.cell_value(114, 2)
-    
-    config['DistrictHeating'] = {}
-    config['DistrictHeating']['PartDH'] = sheet.cell_value(160, 2)
-    config['DistrictHeating']['DemandModifier'] = sheet.cell_value(161, 2)
-    config['DistrictHeating']['HeatLoss'] = sheet.cell_value(162, 2)
-    config['DistrictHeating']['T_out'] = sheet.cell_value(163, 2)
-
 
     # Read the technologies participating to reserve markets:
-    config['ReserveParticipation'] = read_truefalse(sheet, 142, 1, 155, 3)
+    config['ReserveParticipation'] = read_truefalse(sheet, 131, 1, 145, 3)
 
     logging.info("Using config file " + ConfigFile + " to build the simulation environment")
 
@@ -790,21 +564,20 @@ def load_config_heat_excel(ConfigFile_heat):
     sheet = wb.sheet_by_name('main')
 
     config_heat = {} 
-    config_heat['HeatDemandDH'] =sheet.cell_value(9, 2)
-    config_heat['DistrictHeating'] =sheet.cell_value(10, 2)
-    config_heat['T_outDH'] =sheet.cell_value(11, 2)
-    config_heat['COP'] =sheet.cell_value(12, 2)
-    config_heat['HeatPumps'] =sheet.cell_value(13, 2)
+    config_heat['DistrictHeating'] = {}
+    config_heat['DistrictHeating']['PartDH'] = sheet.cell_value(9, 2)
+    config_heat['DistrictHeating']['DemandModifier'] = sheet.cell_value(10, 2)
+    config_heat['DistrictHeating']['HeatLoss'] = sheet.cell_value(11, 2)
+    config_heat['DistrictHeating']['T_out'] = sheet.cell_value(12, 2)
+    config_heat['DistrictHeating']['HeatDemandTot'] = sheet.cell_value(13, 2)
     
-    config_heat['modifiers'] = {}
-    config_heat['modifiers']['PartDH'] =sheet.cell_value(21, 2)
-    config_heat['modifiers']['HeadDemandTotal'] =sheet.cell_value(22, 2)
-    config_heat['modifiers']['Load_year'] =sheet.cell_value(23, 2)
-    
-    config_heat['computing'] = {}
-    config_heat['computing']['COP_formulation'] =sheet.cell_value(28, 2)
-    config_heat['computing']['T_step'] =sheet.cell_value(29, 2) 
-    
+    config_heat['Temperature'] = {}
+    config_heat['Temperature']['T_SH']= sheet.cell_value(21, 2)
+    config_heat['Temperature']['T_HW']= sheet.cell_value(22, 2)
+    config_heat['Temperature']['T_out']= sheet.cell_value(23, 2)
+    config_heat['Temperature']['T_CHP']= sheet.cell_value(24, 2)
+    config_heat['Temperature']['pinch']= sheet.cell_value(25, 2)
+    config_heat['Temperature']['eta_cop']= sheet.cell_value(26, 2)
     
     
     config_heat['Portofolio'] = {}
@@ -815,7 +588,6 @@ def load_config_heat_excel(ConfigFile_heat):
     config_heat['Portofolio']['Gas']= sheet.cell_value(43, 2)
     config_heat['Portofolio']['Coal']= sheet.cell_value(44, 2)
     config_heat['Portofolio']['Nuclear']= sheet.cell_value(45, 2)
-    config_heat['Portofolio']['Oil']= sheet.cell_value(46, 2)
     
     logging.info("Using config file " + ConfigFile_heat + " to build the simulation environment")
 

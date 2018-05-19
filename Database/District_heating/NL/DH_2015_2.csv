@@ -1,0 +1,3 @@
+,Unit,Zone,Loss_factor,T_pinch,T_hot_water,T_space_heating,T_gen_out,TESCapacity,TESRampUp,TESRampDown,TESSelfDischarge,HPModel
+1,Utrecht,NL,0,2,80,40,85,100000,0.2,0.2,0,HP1
+2,Amsterdam,NL,0,2,80,40,85,100000,0.2,0.2,0,HP1

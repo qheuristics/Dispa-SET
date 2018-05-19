@@ -1,0 +1,6 @@
+,HP_capacity,Unit,Zone,DH,HPModel,T_HP_out,T_HP_source,HP_RampUp,HP_RampDown
+1,500000,Amsterdam-HP1,NL,Amsterdam,HP1,85,10,0.2,0.2
+2,500000,Utrecht-HP1,NL,Utrecht,HP1,50,10,0.2,0.2
+2,500000,Utrecht-HP2,NL,Utrecht,HP1,60,10,0.2,0.2
+2,500000,Utrecht-HP3,NL,Utrecht,HP1,70,10,0.2,0.2
+2,500000,Utrecht-HP4,NL,Utrecht,HP1,85,10,0.2,0.2

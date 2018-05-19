@@ -49,11 +49,15 @@ _LOGCONFIG = {
 
 # Importing the main Dispa-SET functions so that they can be called with "ds.function"
 from .preprocessing.preprocessing import build_simulation
+<<<<<<< Updated upstream
 from .preprocessing.preprocessing import build_simulation_heat
+=======
+#from .preprocessing.preprocessing import build_simulation_heat
+>>>>>>> Stashed changes
 from .preprocessing.preprocessing import adjust_capacity,adjust_storage
 from .solve import solve_GAMS, solve_pyomo
 from .misc.gdx_handler import write_variables
-from .preprocessing.data_handler import load_config_excel, load_config_yaml
+from .preprocessing.data_handler import load_config_excel,load_config_heat_excel, load_config_yaml
 from .postprocessing.postprocessing import get_sim_results
 from .postprocessing.postprocessing import ds_to_df
 from .postprocessing.postprocessing import plot_country
@@ -62,6 +66,10 @@ from .postprocessing.postprocessing import get_indicators_powerplant
 from .postprocessing.postprocessing import aggregate_by_fuel
 from .postprocessing.postprocessing import plot_energy_country_fuel
 from .postprocessing.postprocessing import plot_country_capacities
+from .postprocessing.postprocessing import plot_country_capacitiesDH
+from .postprocessing.postprocessing import plot_heat_balanceDH
+from .postprocessing.postprocessing import plot_dispatch_heat
+from .postprocessing.postprocessing import plot_CHP
 from .cli import *
 
 # Removeing log file:
