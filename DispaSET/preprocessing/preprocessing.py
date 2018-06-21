@@ -405,11 +405,11 @@ def build_simulation(config,plot_load=False):
     sets_param['RampStartUpMaximum'] = ['u']
     sets_param['RampShutDownMaximum'] = ['u']
     sets_param['Reserve'] = ['t']
-    sets_param['StorageCapacity'] = ['u']            
+    sets_param['StorageCapacity'] = ['s']
     sets_param['StorageChargingCapacity'] = ['s']
     sets_param['StorageChargingEfficiency'] = ['s']
     sets_param['StorageDischargeEfficiency'] = ['s']
-    sets_param['StorageSelfDischarge'] = ['u']
+    sets_param['StorageSelfDischarge'] = ['s']
     sets_param['StorageInflow'] = ['s', 'h']
     sets_param['StorageInitial'] = ['s']
     sets_param['StorageMinimum'] = ['s']
@@ -418,6 +418,9 @@ def build_simulation(config,plot_load=False):
     sets_param['Technology'] = ['u', 't']
     sets_param['TimeUpMinimum'] = ['u']
     sets_param['TimeDownMinimum'] = ['u']
+    sets_param['TimeUpInitial'] = ['u']
+    sets_param['TimeDownInitial'] = ['u']
+    sets_param['StorageFinalMin'] = ['s']
 
     # Define all the parameters and set a default value of zero:
     for var in sets_param:
@@ -450,7 +453,8 @@ def build_simulation(config,plot_load=False):
 
 
     # List of parameters whose value is known, and provided in the dataframe Plants_sto.
-    for var in ['StorageChargingCapacity', 'StorageChargingEfficiency']:
+    for var in ['StorageChargingCapacity', 'StorageChargingEfficiency', 'StorageCapacity',
+                'StorageSelfDischarge']:
         parameters[var]['val'] = Plants_sto[var].values
 
     # The storage discharge efficiency is actually given by the unit efficiency:

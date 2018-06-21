@@ -10,8 +10,8 @@ from itertools import product
 import cPickle as pickle
 import logging
 
-import os
-os.chdir('..')
+# import os
+# os.chdir('..')
 
 # Import Dispa-SET
 import DispaSET as ds
@@ -51,7 +51,8 @@ for iheat, ipower, icost_heat, iresmod in all_combinations:
     # Build simulation
     SimData = ds.build_simulation(config)
     # Solve using GAMS:
-    r = ds.solve_GAMS(config['SimulationDirectory'], config['GAMS_folder'])
+    # r = ds.solve_GAMS(config['SimulationDirectory'], config['GAMS_folder'])
+    r = ds.solve_pyomo(config['SimulationDirectory'])
 
     # Load inputs and results to memory
     inputs, results = ds.get_sim_results(path=config['SimulationDirectory'], cache=True)

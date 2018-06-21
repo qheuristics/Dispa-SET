@@ -98,7 +98,7 @@ def DispOptim(sets, parameters, LPFormulation=False):
     model.Fuel = Param(sets['u'], sets['f'], initialize=params['Fuel'])  # [n.a.] Fuel type {1 0}
     model.LineNode = Param(sets['l'], sets['n'], initialize=params['LineNode'])  # [n.a.] Incidence matrix {-1 +1}
     model.LoadMaximum = Param(sets['u'], sets['h'], initialize=params['LoadMaximum'])  # [%] Availability factor * (1-OutageFactor)
-    model.LoadShedding = Param(sets['n'], initialize=params['LoadShedding'])  # [n.a.] Load shedding capacity
+    model.LoadShedding = Param(sets['n'], sets['h'], initialize=params['LoadShedding'])  # [n.a.] Load shedding capacity
     model.Location = Param(sets['u'], sets['n'], initialize=params['Location'])  # [n.a.] Location {1 0}
     # model.OutageFactor = Param(sets['u'],sets['h'],initialize=params['OutageFactor']) # [%] Outage factor (100% = full outage)
     model.PartLoadMin = Param(sets['u'], initialize=params['PartLoadMin'])  # [%] Minimum part load
@@ -576,7 +576,7 @@ def DispOptim(sets, parameters, LPFormulation=False):
         ###################################################################################################################################################################################################################################################################
 
     def EQ_LoadShedding(model, n, h):
-        return model.ShedLoad[n, h] <= model.LoadShedding[n]
+        return model.ShedLoad[n, h] <= model.LoadShedding[n, h]
 
     ###################################################################################################################################################################################################################################################################
 
@@ -647,7 +647,7 @@ def try_solvers(prefered_solver,path_cplex=''):
     logging.error("No solvers found on this machine")
     sys.exit(1)
 
-def run_solver(instance, solver="cplex", solver_manager="serial", options_string="", path_cplex=''):
+def run_solver(instance, solver="cbc", solver_manager="serial", options_string="", path_cplex=''):
     # initialize the solver / solver manager.
     solver = try_solvers(solver,path_cplex=path_cplex)
     solver_manager = SolverManagerFactory(solver_manager)  # serial or pyro
