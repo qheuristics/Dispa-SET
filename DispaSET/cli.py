@@ -11,8 +11,8 @@ from ._version import __version__
 @click.option('-c','--config', prompt='Specify the path to the config file', type=click.Path(exists=True),
               default='./ConfigFiles/ConfigTest.xlsx', help='Path to the config file (eg ConfigFiles/Config.xlsx)')
 @click.option('-g','--gams', 'engine',
-              flag_value='gams', default=True, help='Use GAMS version (default)') #Interface to use for solving. Gams or pyomo')
-@click.option('-p','--pyomo', 'engine',
+              flag_value='gams', help='Use GAMS version (default)') #Interface to use for solving. Gams or pyomo')
+@click.option('-p','--pyomo', 'engine', default=True,
               flag_value='pyomo', help='Use pyomo version')
 @click.version_option(prog_name='DispaSET', version=__version__)
 @click.pass_context
