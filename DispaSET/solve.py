@@ -145,4 +145,15 @@ def solve_pyomo(sim_folder):
     logging.info('Completed simulation in {0:.2f} seconds'.format(time.time() - time0))
     if os.path.isfile('warn.log'):
         shutil.copy('warn.log', os.path.join(sim_folder, 'warn_solve.log'))
+
+    out_dir = '{}/{}'.format(SimData['config']['SimulationDirectory'], 'results')
+    if not os.path.isdir(out_dir):
+        os.mkdir(out_dir)
+
+    logging.info('Writing results to {}'.format(out_dir))
+    for k, v in results.items():
+        logging.info('Writing {} to csv'.format(k))
+        v.to_csv('{}/{}.csv'.format(out_dir, k), index=True)
+    logging.info('Completed writing results to {}'.format(out_dir))
+
     return results
