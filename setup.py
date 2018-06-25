@@ -30,7 +30,6 @@ setup(
     long_description=read('README.md'),
     include_package_data=True,
     install_requires=[
-        "future >= 0.15",
         "click >= 3.3",
         "numpy >= 1.12",
         "pandas >= 0.19",
@@ -38,7 +37,7 @@ setup(
         "matplotlib >= 1.5.1",
         "gdxcc >= 7",
         "gamsxcc",
-        "optcc"
+        "optcc"        
     ],
     extras_require={'pyomo': ['pyomo>=5.2'],
                     },
