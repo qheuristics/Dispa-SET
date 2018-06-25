@@ -777,7 +777,7 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
                 parameters[p]['val'] = np.array(parameters[p]['val'], dtype='int')
 
     range_start = index_all.get_loc(first)
-    days = range(range_start / 24, Nhours_sim / 24 - 1 - config['RollingHorizon LookAhead', 'day'],
+    days = range(range_start // 24, Nhours_sim // 24 - 1 - config['RollingHorizon LookAhead', 'day'],
                  config['RollingHorizon Length', 'day'])
 
     results = {}
