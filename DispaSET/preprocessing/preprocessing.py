@@ -344,7 +344,7 @@ def build_simulation(config,plot_load=False):
     ############################################   Sets    ############################################################
     ###################################################################################################################
 
-    # The sets are defined within a dictionnary:
+    # The sets are defined within a dictionary:
     sets = {}
     sets['h'] = [str(x + 1) for x in range(Nhours_long)]
     sets['z'] = [str(x + 1) for x in range(Nhours_long - config['LookAhead'] * 24)]
@@ -720,14 +720,14 @@ def adjust_capacity(inputs,tech_fuel,scaling=1,value=None,singleunit=False,write
     Function used to modify the installed capacities in the Dispa-SET generated input data
     The function update the Inputs.p file in the simulation directory at each call
     
-    :param inputs:      Input data dictionnary OR path to the simulation directory containing Inputs.p
+    :param inputs:      Input data dictionary OR path to the simulation directory containing Inputs.p
     :param tech_fuel:   tuple with the technology and fuel type for which the capacity should be modified
     :param scaling:     Scaling factor to be applied to the installed capacity
     :param value:       Absolute value of the desired capacity (! Applied only if scaling != 1 !)
     :param singleunit:  Set to true if the technology should remain lumped in a single unit
     :param write_gdx:   boolean defining if Inputs.gdx should be also overwritten with the new data
     :param dest_path:   Simulation environment path to write the new input data. If unspecified, no data is written!
-    :return:            New SimData dictionnary 
+    :return:            New SimData dictionary 
     '''
     import pickle
 
@@ -742,7 +742,7 @@ def adjust_capacity(inputs,tech_fuel,scaling=1,value=None,singleunit=False,write
         SimData = inputs
         path = SimData['config']['SimulationDirectory']
     else:
-        logging.error('The input data must be either a dictionnary or string containing a valid directory')
+        logging.error('The input data must be either a dictionary or string containing a valid directory')
         sys.exit(1)
 
     if not isinstance(tech_fuel,tuple):
@@ -805,13 +805,13 @@ def adjust_storage(inputs,tech_fuel,scaling=1,value=None,write_gdx=False,dest_pa
     Function used to modify the storage capacities in the Dispa-SET generated input data
     The function update the Inputs.p file in the simulation directory at each call
     
-    :param inputs:      Input data dictionnary OR path to the simulation directory containing Inputs.p
+    :param inputs:      Input data dictionary OR path to the simulation directory containing Inputs.p
     :param tech_fuel:   tuple with the technology and fuel type for which the capacity should be modified
     :param scaling:     Scaling factor to be applied to the installed capacity
     :param value:       Absolute value of the desired capacity (! Applied only if scaling != 1 !)
     :param write_gdx:   boolean defining if Inputs.gdx should be also overwritten with the new data
     :param dest_path:   Simulation environment path to write the new input data. If unspecified, no data is written!
-    :return:            New SimData dictionnary 
+    :return:            New SimData dictionary 
     '''
     import pickle
 
@@ -825,7 +825,7 @@ def adjust_storage(inputs,tech_fuel,scaling=1,value=None,write_gdx=False,dest_pa
     elif isinstance(inputs,dict):
         SimData = inputs
     else:
-        logging.error('The input data must be either a dictionnary or string containing a valid directory')
+        logging.error('The input data must be either a dictionary or string containing a valid directory')
         sys.exit(1)
 
     if not isinstance(tech_fuel,tuple):

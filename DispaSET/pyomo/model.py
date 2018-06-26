@@ -682,7 +682,7 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
     :return: Dictionary of pandas dataframes with the optimization variables
     """
 
-    # Initialize the results dictionnary:
+    # Initialize the results dictionary:
 
     # Load the config parameter in the pyomo format (easier to read):
     config = pyomo_format(sets, parameters['Config'])
@@ -813,7 +813,7 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
             else:
                 parameters_sliced[var] = parameters[var]
 
-        # Copy the sets dictionnary and slice the 'h' set:
+        # Copy the sets dictionary and slice the 'h' set:
         sets_sliced = sets.copy()
         sets_sliced['h'] = sets_sliced['h'] = range(len(h_range))
 
@@ -880,17 +880,17 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
         results_sliced['LostLoad_MinPower'] = pyomo_to_pandas(opt, 'LostLoad_MinPower')
         results_sliced['LostLoad_Reserve2U'] = pyomo_to_pandas(opt, 'LostLoad_Reserve2U')
         results_sliced['LostLoad_Reserve2D'] = pyomo_to_pandas(opt, 'LostLoad_Reserve2D')
-        # Defining the main results dictionnary:
+        # Defining the main results dictionary:
         if len(results) == 0:
             for r in results_sliced:
                 results[r] = pd.DataFrame(index=index_sim, columns=results_sliced[r].columns)
 
-        # Adding the sliced results to the main results dictionnary:
+        # Adding the sliced results to the main results dictionary:
         for r in results_sliced:
             results_sliced[r].index = index_range
             results[r].loc[index_kept, :] = results_sliced[r].loc[index_kept, :]
 
-            # Calculating the times up and down of each power plant
+        # Calculating the times up and down of each power plant
         TimeUp = np.zeros(Nunits)
         TimeDown = np.zeros(Nunits)
         for u in range(Nunits):
@@ -911,7 +911,7 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
             if TimeDown[u] == len(h_kept):
                 TimeDown[u] += parameters['TimeDownInitial']['val'][u]
 
-                # Updating the initial values for the next optimization:
+        # Updating the initial values for the next optimization:
         parameters['StorageInitial']['val'] = results['StorageLevel'].loc[index_kept[-1], :].values.astype('float')
         parameters['PowerInitial']['val'] = results['Power'].loc[index_kept[-1], :].values.astype('float')
         parameters['TimeUpInitial']['val'] = TimeUp

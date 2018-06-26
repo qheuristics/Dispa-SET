@@ -71,7 +71,7 @@ def pyomo_to_pandas(instance, varname):
 
 def pyomo_format(sets, param):
     """
-    Function that flattens the multidimensional dispaset input data into the pyomo format: a dictionnary with a tuple and the parameter value.
+    Function that flattens the multidimensional dispaset input data into the pyomo format: a dictionary with a tuple and the parameter value.
     The tuple contains the strings of the corresponding set values
     """
 
