@@ -63,7 +63,7 @@ def build_simulation(config,plot_load=False):
     # Load fuel types, technologies, timestep, etc:
     commons = commonvars()
 
-    # Indexes of the simualtion:
+    # Indices of the simulation:
     idx_std = pd.DatetimeIndex(start=pd.datetime(*config['StartDate']), end=pd.datetime(*config['StopDate']),
                                freq=commons['TimeStep'])
     idx_utc_noloc = idx_std - dt.timedelta(hours=1)
@@ -84,7 +84,7 @@ def build_simulation(config,plot_load=False):
     if not isinstance(config['default']['CostHeatSlack'],(float,int)):
         config['default']['CostHeatSlack'] = 50
     
-    # Load :
+    # Load:
     Load = NodeBasedTable(config['Demand'],idx_utc_noloc,config['countries'],tablename='Demand')    
     
     if config['modifiers']['Demand'] != 1:
@@ -95,12 +95,12 @@ def build_simulation(config,plot_load=False):
     if os.path.isfile(config['Interconnections']):
         flows = load_csv(config['Interconnections'], index_col=0, parse_dates=True).fillna(0)
     else:
-        logging.warn('No historical flows will be considered (no valid file provided)')
+        logging.warning('No historical flows will be considered (no valid file provided)')
         flows = pd.DataFrame(index=idx_utc_noloc)
     if os.path.isfile(config['NTC']):
         NTC = load_csv(config['NTC'], index_col=0, parse_dates=True).fillna(0)
     else:
-        logging.warn('No NTC values will be considered (no valid file provided)')
+        logging.warning('No NTC values will be considered (no valid file provided)')
         NTC = pd.DataFrame(index=idx_utc_noloc)
 
     # Load Shedding:
@@ -128,13 +128,13 @@ def build_simulation(config,plot_load=False):
             plants[key] = plants[key+'_pu'] * plants['PowerCapacity']
         else:
             plants[key] = 0
-    # check plant list:
+    # Check plant list:
     check_units(config, plants)
     # If not present, add the non-compulsory fields to the units table: 
-    for key in ['CHPPowerLossFactor','CHPPowerToHeat','CHPType','STOCapacity','STOSelfDischarge','STOMaxChargingPower','STOChargingEfficiency', 'CHPMaxHeat']:
+    for key in ['CHPPowerLossFactor','CHPPowerToHeat', 'CHPType', 'STOCapacity', 'STOSelfDischarge',
+                'STOMaxChargingPower', 'STOChargingEfficiency', 'CHPMaxHeat']:
         if key not in plants.columns:
             plants[key] = np.nan
-
 
     # Defining the hydro storages:
     plants_sto = plants[[u in commons['tech_storage'] for u in plants['Technology']]]
@@ -151,7 +151,7 @@ def build_simulation(config,plot_load=False):
     HeatDemand = UnitBasedTable(plants_chp,config['HeatDemand'],idx_utc_noloc,config['countries'],fallbacks=['Unit'],tablename='HeatDemand',default=0)
     CostHeatSlack = UnitBasedTable(plants_chp,config['CostHeatSlack'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Zone'],tablename='CostHeatSlack',default=config['default']['CostHeatSlack'])
 
-    # data checks:
+    # Data checks:
     check_AvailabilityFactors(plants,AF)
     check_heat_demand(plants,HeatDemand)
 
@@ -163,17 +163,17 @@ def build_simulation(config,plot_load=False):
             tmp = load_csv(config[fuel], header=None, index_col=0, parse_dates=True)
             FuelPrices[fuel] = tmp[1][idx_utc_noloc].values
         elif isinstance(config['default'][fuel], (int, float, complex)):
-            logging.warn('No data file found for "' + fuel + '. Using default value ' + str(config['default'][fuel]) + ' EUR')
+            logging.warning('No data file found for "' + fuel + '. Using default value ' + str(config['default'][fuel]) + ' EUR')
             FuelPrices[fuel] = pd.Series(config['default'][fuel], index=idx_utc_noloc)
         # Special case for lignite and peat, for backward compatibility
         elif fuel == 'PriceOfLignite':             
-            logging.warn('No price data found for "' + fuel + '. Using the same value as for Black Coal')
+            logging.warning('No price data found for "' + fuel + '. Using the same value as for Black Coal')
             FuelPrices[fuel] = FuelPrices['PriceOfBlackCoal']
         elif fuel == 'PriceOfPeat':             
-            logging.warn('No price data found for "' + fuel + '. Using the same value as for biomass')
+            logging.warning('No price data found for "' + fuel + '. Using the same value as for biomass')
             FuelPrices[fuel] = FuelPrices['PriceOfBiomass']       
         else:
-            logging.warn('No data file or default value found for "' + fuel + '. Assuming zero marginal price!')
+            logging.warning('No data file or default value found for "' + fuel + '. Assuming zero marginal price!')
             FuelPrices[fuel] = pd.Series(0, index=idx_utc_noloc)
 
     # Interconnections:
@@ -205,7 +205,7 @@ def build_simulation(config,plot_load=False):
     
     for key in ['TimeUpMinimum','TimeDownMinimum']:
         if any([not x.is_integer() for x in Plants_merged[key].fillna(0).values.astype('float')]):
-            logging.warn(key + ' in the power plant data has been rounded to the nearest integer value')
+            logging.warning(key + ' in the power plant data has been rounded to the nearest integer value')
             Plants_merged.loc[:,key] = Plants_merged[key].fillna(0).values.astype('int32')
 
     if not len(Plants_merged.index.unique()) == len(Plants_merged):
@@ -234,26 +234,26 @@ def build_simulation(config,plot_load=False):
 
     # Defining the hydro storages:
     Plants_sto = Plants_merged[[u in commons['tech_storage'] for u in Plants_merged['Technology']]]
-    # check storage plants:
-    check_sto(config, Plants_sto,raw_data=False)
+    # Check storage plants:
+    check_sto(config, Plants_sto, raw_data=False)
     # Defining the CHPs:
     Plants_chp = Plants_merged[[x.lower() in commons['types_CHP'] for x in Plants_merged['CHPType']]].copy()
-    # check chp plants:
+    # Check chp plants:
     check_chp(config, Plants_chp)
     # For all the chp plants correct the PowerCapacity, which is defined in cogeneration mode in the inputs and in power generation model in the optimization model
     for u in Plants_chp.index:
         PowerCapacity = Plants_chp.loc[u, 'PowerCapacity']
 
-        if Plants_chp.loc[u,'CHPType'].lower() == 'p2h':
+        if Plants_chp.loc[u, 'CHPType'].lower() == 'p2h':
             PurePowerCapacity = PowerCapacity
         else:
-            if pd.isnull(Plants_chp.loc[u,'CHPMaxHeat']):  # If maximum heat is not defined, then it is defined as the intersection between two lines
-                MaxHeat = PowerCapacity / Plants_chp.loc[u,'CHPPowerToHeat']
+            if pd.isnull(Plants_chp.loc[u, 'CHPMaxHeat']):  # If maximum heat is not defined, then it is defined as the intersection between two lines
+                MaxHeat = PowerCapacity / Plants_chp.loc[u, 'CHPPowerToHeat']
                 Plants_chp.loc[u, 'CHPMaxHeat'] = 'inf'
             else:
                 MaxHeat = Plants_chp.loc[u, 'CHPMaxHeat']
-            PurePowerCapacity = PowerCapacity + Plants_chp.loc[u,'CHPPowerLossFactor'] * MaxHeat
-        Plants_merged.loc[u,'PartLoadMin'] = Plants_merged.loc[u,'PartLoadMin'] * PowerCapacity / PurePowerCapacity  # FIXME: Is this correct?
+            PurePowerCapacity = PowerCapacity + Plants_chp.loc[u, 'CHPPowerLossFactor'] * MaxHeat
+        Plants_merged.loc[u,'PartLoadMin'] = Plants_merged.loc[u, 'PartLoadMin'] * PowerCapacity / PurePowerCapacity  # FIXME: Is this correct?
         Plants_merged.loc[u,'PowerCapacity'] = PurePowerCapacity
         
     # Get the hydro time series corresponding to the original plant list:
@@ -269,14 +269,14 @@ def build_simulation(config,plot_load=False):
         oldname = plants['Unit'][s]
         newname = mapping['NewIndex'][s]
         if oldname not in HeatDemand:
-            logging.warn('No heat demand profile found for CHP plant "' + str(oldname) + '". Assuming zero')
+            logging.warning('No heat demand profile found for CHP plant "' + str(oldname) + '". Assuming zero')
             HeatDemand[oldname] = 0
         if oldname not in CostHeatSlack:
-            logging.warn('No heat cost profile found for CHP plant "' + str(oldname) + '". Assuming zero')
+            logging.warning('No heat cost profile found for CHP plant "' + str(oldname) + '". Assuming zero')
             CostHeatSlack[oldname] = 0
  
 
-    # merge the outages:
+    # Merge the outages:
     for i in plants.index:  # for all the old plant indexes
         # get the old plant name corresponding to s:
         oldname = plants['Unit'][i]
@@ -289,10 +289,8 @@ def build_simulation(config,plot_load=False):
     HeatDemand_merged = merge_series(plants, HeatDemand, mapping, tablename='HeatDemand',method='Sum')
     AF_merged = merge_series(plants, AF, mapping, tablename='AvailabilityFactors')
     CostHeatSlack_merged = merge_series(plants, CostHeatSlack, mapping, tablename='CostHeatSlack')
-    
 
-    # %%
-    # checking data
+    # Checking data
     check_df(Load, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1], name='Load')
     check_df(AF_merged, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1],
              name='AF_merged')
@@ -472,9 +470,9 @@ def build_simulation(config,plot_load=False):
                                                      Plants_sto['StorageCapacity'][s] * Plants_sto['Nunits'][s]
             parameters['StorageProfile']['val'][i, :] = ReservoirLevels_merged[s][idx_long].values
             if any(ReservoirLevels_merged[s] > 1):
-                logging.warn(s + ': The reservoir level is sometimes higher than its capacity!')
+                logging.warning(s + ': The reservoir level is sometimes higher than its capacity!')
         else:
-            logging.warn( 'Could not find reservoir level data for storage plant ' + s + '. Assuming 50% of capacity')
+            logging.warning( 'Could not find reservoir level data for storage plant ' + s + '. Assuming 50% of capacity')
             parameters['StorageInitial']['val'][i] = 0.5 * Plants_sto['StorageCapacity'][s]
             parameters['StorageProfile']['val'][i, :] = 0.5
 
@@ -546,7 +544,7 @@ def build_simulation(config,plot_load=False):
                 unit]  
             found = True
         if not found:
-            logging.warn('No fuel price value has been found for fuel ' + Plants_merged['Fuel'][unit] + ' in unit ' + \
+            logging.warning('No fuel price value has been found for fuel ' + Plants_merged['Fuel'][unit] + ' in unit ' + \
                   Plants_merged['Unit'][unit] + '. A null variable cost has been assigned')
 
     # %%#################################################################################################################################################################################################
@@ -569,7 +567,7 @@ def build_simulation(config,plot_load=False):
             if u in Outages_merged.columns:
                 parameters['OutageFactor']['val'][i, :] = Outages_merged[u].values
             else:
-                logging.warn('Outages factors not found for unit ' + u + '. Assuming no outages')
+                logging.warning('Outages factors not found for unit ' + u + '. Assuming no outages')
 
     # Participation to the reserve market
     values = np.array([s in config['ReserveParticipation'] for s in sets['t']], dtype='bool')

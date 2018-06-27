@@ -156,4 +156,6 @@ def solve_pyomo(sim_folder):
         v.to_csv('{}/{}.csv'.format(out_dir, k), index=True)
     logging.info('Completed writing results to {}'.format(out_dir))
 
+    logging.info('Total System Costs: {:,}'.format(results['SystemCost'].sum().iloc[0]))
+
     return results
