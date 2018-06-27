@@ -4,7 +4,7 @@
 # http://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output/1336640#1336640
 
 # how to use:
-# i used a dict-based logging configuration, not sure what else would work.
+# I used a dict-based logging configuration, not sure what else would work.
 #
 # import logging, logging.config, colorstreamhandler
 #

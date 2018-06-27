@@ -138,7 +138,7 @@ _LOGCONFIG = {
 try:
     logging.config.dictConfig(_LOGCONFIG)
         # Display a few messages:
-    logging.warn('This is a warning')
+    logging.warning('This is a warning')
     logging.info('This is information')
     logging.critical('This is critical')
     logging.error('This is an error')

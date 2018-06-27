@@ -33,13 +33,14 @@ def get_set_members(instance, sets):
     return sm
 
 
-def pyomo_to_pandas(instance, varname):
+def pyomo_to_pandas(instance, varname, dual=False):
     """
     Function converting a pyomo variable or parameter into a pandas dataframe.
     The variable must have one or two dimensions and the sets must be provided as a list of lists
 
     :param instance: Pyomo Instance
     :param varname: Name of the Pyomo Variable (string)
+    :param dual: Boolean to flag if dual variable should be reported
     """
     setnames = get_sets(instance, varname)
     sets = get_set_members(instance, setnames)
@@ -49,10 +50,18 @@ def pyomo_to_pandas(instance, varname):
         logging.error('The number of provided set lists (' + str(
             len(sets)) + ') does not match the dimensions of the variable (' + str(var.dim()) + ')')
         sys.exit(1)
+    elif var.dim() > 2:
+        logging.warning('the pyomo_to_pandas function currently only accepts one or two-dimensional variables')
+        return []
+
+    if dual:
+        data = {ix:  instance.dual.get(var[ix]) for ix in var}
+    else:
+        data = var.get_values()
+
     if var.dim() == 1:
         [SecondSet] = sets
         out = pd.DataFrame(columns=[var.name], index=SecondSet)
-        data = var.get_values()
         for idx in data:
             out[var.name][idx] = data[idx]
         return out
@@ -60,13 +69,9 @@ def pyomo_to_pandas(instance, varname):
     elif var.dim() == 2:
         [FirstSet, SecondSet] = sets
         out = pd.DataFrame(columns=FirstSet, index=SecondSet)
-        data = var.get_values()
         for idx in data:
             out[idx[0]][idx[1]] = data[idx]
         return out
-    else:
-        logging.warn('the pyomo_to_pandas function currently only accepts one or two-dimensional variables')
-        return []
 
 
 def pyomo_format(sets, param):

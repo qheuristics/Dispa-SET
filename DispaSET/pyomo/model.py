@@ -20,7 +20,7 @@ import logging
 try:
 
     from pyomo.environ import Constraint, ConcreteModel, Objective, Param, Set, Var, \
-        minimize, SolverManagerFactory, SolverFactory, PositiveReals, Binary
+        minimize, SolverManagerFactory, SolverFactory, PositiveReals, Binary, Suffix
     from pyomo.opt import TerminationCondition
 except ImportError:
     logging.critical('Pyomo and a compatible solver is needed to run the pyomo version of DispaSET. Please install by typing "pip install pyomo"')
@@ -35,11 +35,11 @@ from .utils import pyomo_format, pyomo_to_pandas
 def DispOptim(sets, parameters, LPFormulation=False):
     """
     This is the main optimization function of Dispaset. 
-    Two operation are performed:
+    Two operations are performed:
     1. Translation of the dispaset data format into the pyomo format
     2. Definition of the Pyomo optimization model as a ConcreteModel
     
-    :param sets: Dictionary containing the sets (defined as a list of strings or integegers)
+    :param sets: Dictionary containing the sets (defined as a list of strings or integers)
     :param parameters: Dictionary containing the parameters of the optimization problem (in the DispaSET 2.1.1 format)
     
     :return: The Pyomo optimization model instance
@@ -47,10 +47,11 @@ def DispOptim(sets, parameters, LPFormulation=False):
 
     # Definition of model:
     model = ConcreteModel('DispaSET')
+    model.dual = Suffix(direction=Suffix.IMPORT)
 
-    #######################################################################################################################
-    ############################################ Definition of the sets ###################################################
-    #######################################################################################################################
+    ####################################################################################################################
+    ############################################ Definition of the sets ################################################
+    ####################################################################################################################
 
     # Assign all sets to the pyomo model (to be changed using real Pyomo sets!!)
 
@@ -634,11 +635,12 @@ def DispOptim(sets, parameters, LPFormulation=False):
 
     return model
 
+
 def try_solvers(prefered_solver,path_cplex=''):
     """ Initialize solver engine, trying different solvers. Faster solvers are tried first """
     for solver in [prefered_solver, 'cplex', 'gurobi', 'cbc', 'glpk']:
-        if solver=='cplex' and os.path.isfile(path_cplex):
-            s = SolverFactory(solver,executable=path_cplex)
+        if solver == 'cplex' and os.path.isfile(path_cplex):
+            s = SolverFactory(solver, executable=path_cplex)
         else:
             s = SolverFactory(solver)
         if s.available():
@@ -647,15 +649,16 @@ def try_solvers(prefered_solver,path_cplex=''):
     logging.error("No solvers found on this machine")
     sys.exit(1)
 
-def run_solver(instance, solver="cbc", solver_manager="serial", options_string="", path_cplex=''):
+
+def run_solver(instance, solver='cplex', solver_manager='serial', options_string='', path_cplex=''):
     # initialize the solver / solver manager.
-    solver = try_solvers(solver,path_cplex=path_cplex)
+    solver = try_solvers(solver, path_cplex=path_cplex)
     solver_manager = SolverManagerFactory(solver_manager)  # serial or pyro
 
     results = solver.solve(instance, options_string=options_string, tee=True)
     if results.solver.termination_condition != TerminationCondition.optimal:
         # something went wrong
-        logging.warn("Solver: %s" % results.solver.termination_condition)
+        logging.warning("Solver: %s" % results.solver.termination_condition)
         logging.debug(results.solver)
     else:
         logging.info("Solver: %s" % results.solver.termination_condition)
@@ -798,8 +801,7 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
         for var in parameters:
             if parameters[var]['sets'][-1] == 'h':  # if the last set of the parameter is time
                 dim = len(parameters[var]['sets'])
-                var_sliced = {}
-                var_sliced['sets'] = parameters[var]['sets']
+                var_sliced = {'sets': parameters[var]['sets']}
                 if dim == 1:
                     var_sliced['val'] = parameters[var]['val'][h_range]
                 elif dim == 2:
@@ -807,7 +809,8 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
                 elif dim == 3:
                     var_sliced['val'] = parameters[var]['val'][:, :, h_range]
                 else:
-                    logging.error('Variables with more than 3 dimensions are not allowed. ' + parameters[var]['name'] + ' has ' + str(dim) + ' Dimensions')
+                    logging.error('Variables with more than 3 dimensions are not allowed. ' + parameters[var]['name'] +
+                                  ' has ' + str(dim) + ' Dimensions')
                     sys.exit(1)
                 parameters_sliced[var] = var_sliced
             else:
@@ -832,36 +835,40 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
 
         parameters_sliced['TimeUpLeft_JustStarted'] = {'sets': ['u', 'h'],
                                                        'val': np.zeros([Nunits, len(h_range)], dtype='int')}
+
         parameters_sliced['TimeDownLeft_JustStopped'] = {'sets': ['u', 'h'],
                                                          'val': np.zeros([Nunits, len(h_range)], dtype='int')}
         for u in range(Nunits):
             parameters_sliced['TimeUpLeft_JustStarted']['val'][u, :] = np.minimum(
                 len(h_range) - 1 - np.arange(len(h_range)),
                 parameters_sliced['TimeUpMinimum']['val'][u] * np.ones(len(h_range))).astype('int')
+
             parameters_sliced['TimeDownLeft_JustStopped']['val'][u, :] = np.minimum(
                 len(h_range) - 1 - np.arange(len(h_range)),
                 parameters_sliced['TimeDownMinimum']['val'][u] * np.ones(len(h_range))).astype('int')
 
         parameters_sliced['StorageFinalMin'] = {'sets': ['s'], 'val': np.zeros(len(sets['s']))}
         for s in range(len(sets['s'])):
-            parameters_sliced['StorageFinalMin']['val'][s] = np.minimum(parameters_sliced['StorageInitial']['val'][s] +
-                                                                        parameters_sliced['StorageInflow']['val'][s, :].sum() -
-                                                                        parameters_sliced['StorageOutflow']['val'][s, :].sum(),
-                                                                        parameters_sliced['StorageProfile']['val'][s, -1] *
-                                                                        parameters_sliced['StorageCapacity']['val'][s] *
-                                                                        parameters_sliced['AvailabilityFactor']['val'][s, -1])
+            parameters_sliced['StorageFinalMin']['val'][s] = np.minimum(
+                                                                parameters_sliced['StorageInitial']['val'][s] +
+                                                                parameters_sliced['StorageInflow']['val'][s, :].sum() -
+                                                                parameters_sliced['StorageOutflow']['val'][s, :].sum(),
+                                                                parameters_sliced['StorageProfile']['val'][s, -1] *
+                                                                parameters_sliced['StorageCapacity']['val'][s] *
+                                                                parameters_sliced['AvailabilityFactor']['val'][s, -1])
 
         # Optimize: 
         instance = DispOptim(sets_sliced, parameters_sliced, LPFormulation)
         if not LPFormulation:
-            opt = run_solver(instance, options_string="mipgap=0.01",path_cplex=path_cplex)
+            opt = run_solver(instance, options_string="mipgap=0.01", path_cplex=path_cplex)
         else:
-            opt = run_solver(instance,path_cplex=path_cplex)
+            opt = run_solver(instance, path_cplex=path_cplex)
 
         results_sliced = {}
-        # TDO Iterate all VARs instead of listing everything. Can we?
-        #for v in instance.component_objects(Var):  # FIXME: Seems like this loops does the same as the lines below
-        #    results_sliced[v] = pyomo_to_pandas(opt, v.getname())
+        # TODO: Iterate all VARs instead of listing everything. Can we?
+        # for v in instance.component_objects(Var):  # FIXME: Seems like this loops does the same as the lines below
+        #     print(v.getname())
+        #     results_sliced[v] = pyomo_to_pandas(opt, v.getname())
 
         results_sliced['Committed'] = pyomo_to_pandas(opt, 'Committed')
         results_sliced['CostStartUpH'] = pyomo_to_pandas(opt, 'CostStartUpH')
@@ -880,6 +887,9 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
         results_sliced['LostLoad_MinPower'] = pyomo_to_pandas(opt, 'LostLoad_MinPower')
         results_sliced['LostLoad_Reserve2U'] = pyomo_to_pandas(opt, 'LostLoad_Reserve2U')
         results_sliced['LostLoad_Reserve2D'] = pyomo_to_pandas(opt, 'LostLoad_Reserve2D')
+
+        results_sliced['Price_Energy_DA'] = pyomo_to_pandas(opt, 'EQ_Demand_balance_DA', dual=True)
+
         # Defining the main results dictionary:
         if len(results) == 0:
             for r in results_sliced:
