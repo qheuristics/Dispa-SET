@@ -18,6 +18,7 @@ def isVRE(tech):
     '''
     return tech in ['HROR','PHOT','WTON','WTOF']
 
+
 def isStorage(tech):
     '''
     Function that returns true the technology is a storage technology
@@ -25,8 +26,7 @@ def isStorage(tech):
     return tech in ['HDAM','HPHS','CAES','BATS','BEVS','THMS','P2GS']
 
 
-
-def check_AvailabilityFactors(plants,AF):
+def check_AvailabilityFactors(plants, AF):
     '''
     Function that checks the validity of the provided availability factors and warns
     if a default value of 100% is used.
@@ -44,6 +44,16 @@ def check_AvailabilityFactors(plants,AF):
                     logging.critical('The availability factor of unit ' + str(u) + ' + for technology ' + t + ' is always 100%!')
             else:
                 logging.critical('Unit ' + str(u) + ' (technology ' + t + ') does not appear in the availbilityFactors table. Its values will be set to 100%!')
+
+
+def check_MarkUps(plants, MarkUps):
+    '''
+    Function that checks whether a mark-up has been specified for a unit and otherwise warns of  0 default being applied
+    '''
+    for u in plants:
+        if u not in MarkUps:
+            logging.critical('Unit {} does not appear in the MarkUps table. Its values will be set to 0'.format(u))
+
 
 def check_clustering(plants,plants_merged):
     '''
@@ -130,7 +140,6 @@ def check_sto(config, plants,raw_data=True):
                 sys.exit(1)
 
     return True
-
 
 
 def check_chp(config, plants):
@@ -244,6 +253,7 @@ def check_chp(config, plants):
                 sys.exit(1)                           
 
     return True
+
 
 def check_units(config, plants):
     """
@@ -530,5 +540,3 @@ def check_simulation_environment(SimulationPath, store_type='pickle', firstline=
     else:
         logging.critical('The "type" parameter must be one of the following : "list", "excel", "pickle"')
         sys.exit(1)
-
-

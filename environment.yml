@@ -6,6 +6,7 @@ dependencies:
   - numpy
   - pandas
   - xlrd
+  - xlsxwriter
   - pyyaml
   - pytest
   - cython

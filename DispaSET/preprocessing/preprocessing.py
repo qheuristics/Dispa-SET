@@ -18,7 +18,8 @@ try:
 except:
     pass
 
-from .data_check import check_units, check_chp, check_sto, check_heat_demand, check_df, isStorage, check_MinMaxFlows,check_AvailabilityFactors, check_clustering
+from .data_check import (check_units, check_chp, check_sto, check_heat_demand, check_df, isStorage, check_MinMaxFlows,
+                         check_AvailabilityFactors, check_clustering, check_MarkUps)
 from .utils import clustering, interconnections, incidence_matrix
 from .data_handler import UnitBasedTable,NodeBasedTable,merge_series, define_parameter, write_to_excel, load_csv
 
@@ -35,7 +36,7 @@ def get_git_revision_tag():
     except:
         return 'NA'
 
-def build_simulation(config,plot_load=False):
+def build_simulation(config, plot_load=False):
     """
     This function reads the DispaSET config, loads the specified data,
     processes it when needed, and formats it in the proper DispaSET format.
@@ -104,7 +105,8 @@ def build_simulation(config,plot_load=False):
         NTC = pd.DataFrame(index=idx_utc_noloc)
 
     # Load Shedding:
-    LoadShedding = NodeBasedTable(config['LoadShedding'],idx_utc_noloc,config['countries'],tablename='LoadShedding',default=config['default']['LoadShedding'])    
+    LoadShedding = NodeBasedTable(config['LoadShedding'], idx_utc_noloc, config['countries'], tablename='LoadShedding',
+                                  default=config['default']['LoadShedding'])
     CostLoadShedding = NodeBasedTable(config['CostLoadShedding'],idx_utc_noloc,config['countries'],tablename='CostLoadShedding',default=config['default']['CostLoadShedding'])    
 
     # Power plants:
@@ -145,16 +147,29 @@ def build_simulation(config,plot_load=False):
     # Defining the CHPs:
     plants_chp = plants[[str(x).lower() in commons['types_CHP'] for x in plants['CHPType']]]
 
-    Outages = UnitBasedTable(plants,config['Outages'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology'],tablename='Outages')
-    AF = UnitBasedTable(plants,config['RenewablesAF'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology'],tablename='AvailabilityFactors',default=1,RestrictWarning=commons['tech_renewables'])
-    ReservoirLevels = UnitBasedTable(plants_sto,config['ReservoirLevels'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology','Zone'],tablename='ReservoirLevels',default=0)
-    ReservoirScaledInflows = UnitBasedTable(plants_sto,config['ReservoirScaledInflows'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Technology','Zone'],tablename='ReservoirScaledInflows',default=0)
-    HeatDemand = UnitBasedTable(plants_chp,config['HeatDemand'],idx_utc_noloc,config['countries'],fallbacks=['Unit'],tablename='HeatDemand',default=0)
-    CostHeatSlack = UnitBasedTable(plants_chp,config['CostHeatSlack'],idx_utc_noloc,config['countries'],fallbacks=['Unit','Zone'],tablename='CostHeatSlack',default=config['default']['CostHeatSlack'])
+    Outages = UnitBasedTable(plants, config['Outages'], idx_utc_noloc, config['countries'],
+                             fallbacks=['Unit','Technology'], tablename='Outages')
+    AF = UnitBasedTable(plants, config['RenewablesAF'], idx_utc_noloc, config['countries'],
+                        fallbacks=['Unit','Technology'], tablename='AvailabilityFactors', default=1,
+                        RestrictWarning=commons['tech_renewables'])
+    ReservoirLevels = UnitBasedTable(plants_sto, config['ReservoirLevels'], idx_utc_noloc, config['countries'],
+                                     fallbacks=['Unit','Technology','Zone'], tablename='ReservoirLevels',default=0)
+    ReservoirScaledInflows = UnitBasedTable(plants_sto, config['ReservoirScaledInflows'],
+                                            idx_utc_noloc,config['countries'],
+                                            fallbacks=['Unit','Technology','Zone'],
+                                            tablename='ReservoirScaledInflows',default=0)
+    HeatDemand = UnitBasedTable(plants_chp, config['HeatDemand'], idx_utc_noloc, config['countries'],
+                                fallbacks=['Unit'], tablename='HeatDemand', default=0)
+    CostHeatSlack = UnitBasedTable(plants_chp, config['CostHeatSlack'], idx_utc_noloc, config['countries'],
+                                   fallbacks=['Unit', 'Zone'], tablename='CostHeatSlack',
+                                   default=config['default']['CostHeatSlack'])
+    MarkUps = UnitBasedTable(plants, config['MarkUps'], idx_utc_noloc, config['countries'],
+                             fallbacks=['Unit', 'Technology'], tablename='MarkUps', default=0)
 
     # Data checks:
-    check_AvailabilityFactors(plants,AF)
-    check_heat_demand(plants,HeatDemand)
+    check_AvailabilityFactors(plants, AF)
+    check_heat_demand(plants, HeatDemand)
+    check_MarkUps(plants, MarkUps)
 
     # Fuel prices:
     fuels = ['PriceOfNuclear', 'PriceOfBlackCoal', 'PriceOfGas', 'PriceOfFuelOil', 'PriceOfBiomass', 'PriceOfCO2', 'PriceOfLignite', 'PriceOfPeat']
@@ -289,6 +304,7 @@ def build_simulation(config,plot_load=False):
     HeatDemand_merged = merge_series(plants, HeatDemand, mapping, tablename='HeatDemand',method='Sum')
     AF_merged = merge_series(plants, AF, mapping, tablename='AvailabilityFactors')
     CostHeatSlack_merged = merge_series(plants, CostHeatSlack, mapping, tablename='CostHeatSlack')
+    MarkUps_merged = merge_series(plants, MarkUps, mapping, tablename='Markups')
 
     # Checking data
     check_df(Load, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1], name='Load')
@@ -310,12 +326,7 @@ def build_simulation(config,plot_load=False):
              name='LoadShedding')
     check_df(CostLoadShedding, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1],
              name='CostLoadShedding')
-
-#    for key in Renewables:
-#        check_df(Renewables[key], StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1],
-#                 name='Renewables["' + key + '"]')
-
-    # %%%
+    check_df(MarkUps_merged, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1], name='MarkUps_merged')
 
     # Extending the data to include the look-ahead period (with constant values assumed)
     enddate_long = idx_utc_noloc[-1] + dt.timedelta(days=config['LookAhead'])
@@ -335,6 +346,7 @@ def build_simulation(config,plot_load=False):
         method='bfill')
     LoadShedding = LoadShedding.reindex(idx_long, method='nearest').fillna(method='bfill')
     CostLoadShedding = CostLoadShedding.reindex(idx_long, method='nearest').fillna(method='bfill')
+    MarkUps_merged = MarkUps_merged.reindex(idx_long, method='nearest').fillna(method='bfill')
 #    for tr in Renewables:
 #        Renewables[tr] = Renewables[tr].reindex(idx_long, method='nearest').fillna(method='bfill')
 
@@ -391,7 +403,7 @@ def build_simulation(config,plot_load=False):
     sets_param['LineNode'] = ['l', 'n']
     sets_param['LoadShedding'] = ['n','h']
     sets_param['Location'] = ['u', 'n']
-    sets_param['Markup'] = ['u', 'h']
+    # sets_param['Markup'] = ['u', 'h']
     sets_param['Nunits'] = ['u']
     sets_param['OutageFactor'] = ['u', 'h']
     sets_param['PartLoadMin'] = ['u']
@@ -419,6 +431,7 @@ def build_simulation(config,plot_load=False):
     sets_param['TimeUpInitial'] = ['u']
     sets_param['TimeDownInitial'] = ['u']
     sets_param['StorageFinalMin'] = ['s']
+    sets_param['MarkUps'] = ['u', 'h']
 
     # Define all the parameters and set a default value of zero:
     for var in sets_param:
@@ -486,7 +499,8 @@ def build_simulation(config,plot_load=False):
             parameters['HeatDemand']['val'][i, :] = HeatDemand_merged[u][idx_long].values 
             parameters['CostHeatSlack']['val'][i, :] = CostHeatSlack_merged[u][idx_long].values
 
-    # Ramping rates are reconstructed for the non dimensional value provided (start-up and normal ramping are not differentiated)
+    # Ramping rates are reconstructed for the non dimensional value provided
+    # (start-up and normal ramping are not differentiated)
     parameters['RampUpMaximum']['val'] = Plants_merged['RampUpRate'].values * Plants_merged['PowerCapacity'].values * 60
     parameters['RampDownMaximum']['val'] = Plants_merged['RampDownRate'].values * Plants_merged[
         'PowerCapacity'].values * 60
@@ -504,7 +518,6 @@ def build_simulation(config,plot_load=False):
         for i, u in enumerate(sets['u']):
             if u in AF_merged.columns:
                 parameters['AvailabilityFactor']['val'][i, :] = AF_merged[u].values
-
 
     # Demand
     reserve_2U_tot = {i: (np.sqrt(10 * max(Load[i]) + 150 ** 2) - 150) for i in Load.columns}
@@ -525,13 +538,17 @@ def build_simulation(config,plot_load=False):
         parameters['LoadShedding']['val'][i] = LoadShedding[c] * Load[c].max()
         parameters['CostLoadShedding']['val'][i] = CostLoadShedding[c]
 
+    # Mark-ups:
+    for i, u in enumerate(sets['u']):
+        parameters['MarkUps']['val'][i, :] = MarkUps_merged[u].values
+
     # %%#################################################################################################################################################################################################
     # Variable Cost
     # Equivalence dictionary between fuel types and price entries in the config sheet:
     FuelEntries = {'BIO': 'PriceOfBiomass', 'GAS': 'PriceOfGas', 'HRD': 'PriceOfBlackCoal', 'LIG': 'PriceOfLignite',
                    'NUC': 'PriceOfNuclear', 'OIL': 'PriceOfFuelOil', 'PEA': 'PriceOfPeat'}
     for unit in range(Nunits):
-        parameters['CostVariable']['val'][unit, :] = Plants_merged['Vom'][unit]
+        parameters['CostVariable']['val'][unit, :] = Plants_merged['Vom'][unit] + parameters['MarkUps']['val'][unit, :]
         found = False
         for FuelEntry in FuelEntries:            
             if Plants_merged['Fuel'][unit] == FuelEntry:
@@ -579,12 +596,12 @@ def build_simulation(config,plot_load=False):
         idx = sets['t'].index(Plants_merged['Technology'][unit])
         parameters['Technology']['val'][unit, idx] = True
 
-        # Fuels
+    # Fuels
     for unit in range(Nunits):
         idx = sets['f'].index(Plants_merged['Fuel'][unit])
         parameters['Fuel']['val'][unit, idx] = True
 
-        # Location
+    # Location
     for i in range(len(sets['n'])):
         parameters['Location']['val'][:, i] = (Plants_merged['Zone'] == config['countries'][i]).values
 
@@ -612,7 +629,7 @@ def build_simulation(config,plot_load=False):
             if Plants_merged['Fuel'][i] in ['GAS', 'NUC'] and Plants_merged['PowerCapacity'][i] > 350:
                 parameters['PowerInitial']['val'][i] = (Plants_merged['PartLoadMin'][i] + 1) / 2 * \
                                                        Plants_merged['PowerCapacity'][i]
-            # Config variables:
+    # Config variables:
     sets['x_config'] = ['FirstDay', 'LastDay', 'RollingHorizon Length', 'RollingHorizon LookAhead']
     sets['y_config'] = ['year', 'month', 'day']
     dd_begin = idx_long[4]
@@ -641,7 +658,7 @@ def build_simulation(config,plot_load=False):
     if config['WriteGDX']:
         write_variables(config['GAMS_folder'], gdx_out, [sets, parameters])
 
-    # if the sim variable was not defined:
+    # If the sim variable was not defined:
     if 'sim' not in locals():
         logging.error('Please provide a path where to store the DispaSET inputs (in the "sim" variable)')
         sys.exit(1)

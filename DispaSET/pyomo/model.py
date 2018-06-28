@@ -775,8 +775,8 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
         loc = np.where(parameters['Location']['val'][u, :] == 1)[0][0]
         curt = parameters['Curtailment']['val'][loc]
         if tech in sets['tr'] and curt != 1:
-            parameters['PowerMustRun']['val'][u, :] = parameters['PowerCapacity']['val'][u] * \
-                                                      parameters['AvailabilityFactor']['val'][u, :]
+            parameters['PowerMustRun']['val'][u, :] = (parameters['PowerCapacity']['val'][u] *
+                                                      parameters['AvailabilityFactor']['val'][u, :])
 
     # Converting boolean array to integers (pyomo does not like booleans)
     for p in parameters:

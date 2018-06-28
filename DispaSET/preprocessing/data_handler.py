@@ -5,6 +5,8 @@ import sys
 import numpy as np
 import pandas as pd
 
+from six.moves import reload_module
+
 try:
     from future.builtins import int
 except:
@@ -81,7 +83,6 @@ def NodeBasedTable(path,idx,countries,tablename='',default=None):
             data[c] = tmp.iloc[:,0]
      
     return data   
-
 
 
 def UnitBasedTable(plants,path,idx,countries,fallbacks=['Unit'],tablename='',default=None,RestrictWarning=None):
@@ -307,14 +308,14 @@ def write_to_excel(xls_out, list_vars):
     import pandas as pd
 
     # import sys
-    reload(sys)
-    sys.setdefaultencoding("utf-8")
+    # reload(sys)
+    reload_module(sys)
+    # sys.setdefaultencoding("utf-8")
 
     if not os.path.exists(xls_out):
         os.mkdir(xls_out)
 
-
-        # Printing all sets in one sheet:
+    # Printing all sets in one sheet:
     writer = pd.ExcelWriter(os.path.join(xls_out, 'InputDispa-SET - Sets.xlsx'), engine='xlsxwriter')
 
     [sets, parameters] = list_vars
@@ -497,7 +498,7 @@ def load_config_excel(ConfigFile):
     params = ['Demand', 'Outages', 'PowerPlantData', 'RenewablesAF', 'LoadShedding', 'NTC', 'Interconnections',
               'ReservoirScaledInflows', 'PriceOfNuclear', 'PriceOfBlackCoal', 'PriceOfGas', 'PriceOfFuelOil',
               'PriceOfBiomass', 'PriceOfCO2', 'ReservoirLevels', 'PriceOfLignite', 'PriceOfPeat','HeatDemand',
-              'CostHeatSlack','CostLoadShedding']
+              'CostHeatSlack','CostLoadShedding', 'MarkUps']
     for i, param in enumerate(params):
         config[param] = sheet.cell_value(61 + i, 2)
 
