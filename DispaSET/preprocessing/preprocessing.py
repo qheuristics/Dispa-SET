@@ -119,6 +119,7 @@ def build_simulation(config,plot_load=False):
     plants = plants[plants['Technology'] != 'Other']
     plants = plants[pd.notnull(plants['PowerCapacity'])]
     plants.index = range(len(plants))
+    plants = plants.fillna({'Vom': 0})
 
     # Some columns can be in two format (absolute or per unit). If not specified, they are set to zero:
     for key in ['StartUpCost','NoLoadCost']:
@@ -274,7 +275,6 @@ def build_simulation(config,plot_load=False):
         if oldname not in CostHeatSlack:
             logging.warning('No heat cost profile found for CHP plant "' + str(oldname) + '". Assuming zero')
             CostHeatSlack[oldname] = 0
- 
 
     # Merge the outages:
     for i in plants.index:  # for all the old plant indexes
@@ -449,7 +449,6 @@ def build_simulation(config,plot_load=False):
         if var in Plants_merged:
             parameters[var]['val'] = Plants_merged[var].values
 
-
     # List of parameters whose value is known, and provided in the dataframe Plants_sto.
     for var in ['StorageChargingCapacity', 'StorageChargingEfficiency', 'StorageCapacity',
                 'StorageSelfDischarge']:
@@ -508,7 +507,6 @@ def build_simulation(config,plot_load=False):
 
 
     # Demand
-    # Dayahead['NL'][1800:1896] = Dayahead['NL'][1632:1728]
     reserve_2U_tot = {i: (np.sqrt(10 * max(Load[i]) + 150 ** 2) - 150) for i in Load.columns}
     reserve_2D_tot = {i: (0.5 * reserve_2U_tot[i]) for i in Load.columns}
 
@@ -530,13 +528,16 @@ def build_simulation(config,plot_load=False):
     # %%#################################################################################################################################################################################################
     # Variable Cost
     # Equivalence dictionary between fuel types and price entries in the config sheet:
-    FuelEntries = {'BIO':'PriceOfBiomass', 'GAS':'PriceOfGas', 'HRD':'PriceOfBlackCoal', 'LIG':'PriceOfLignite', 'NUC':'PriceOfNuclear', 'OIL':'PriceOfFuelOil', 'PEA':'PriceOfPeat'}
+    FuelEntries = {'BIO': 'PriceOfBiomass', 'GAS': 'PriceOfGas', 'HRD': 'PriceOfBlackCoal', 'LIG': 'PriceOfLignite',
+                   'NUC': 'PriceOfNuclear', 'OIL': 'PriceOfFuelOil', 'PEA': 'PriceOfPeat'}
     for unit in range(Nunits):
+        parameters['CostVariable']['val'][unit, :] = Plants_merged['Vom'][unit]
         found = False
         for FuelEntry in FuelEntries:            
             if Plants_merged['Fuel'][unit] == FuelEntry:
-                parameters['CostVariable']['val'][unit, :] = FuelPrices[FuelEntries[FuelEntry]] / Plants_merged['Efficiency'][unit] + \
-                                                             Plants_merged['EmissionRate'][unit] * FuelPrices['PriceOfCO2']
+                parameters['CostVariable']['val'][unit, :] += (
+                        FuelPrices[FuelEntries[FuelEntry]] / Plants_merged['Efficiency'][unit] +
+                        Plants_merged['EmissionRate'][unit] * FuelPrices['PriceOfCO2'])
                 found = True
         # Special case for biomass plants, which are not included in EU ETS:
         if Plants_merged['Fuel'][unit] == 'BIO':
@@ -544,8 +545,8 @@ def build_simulation(config,plot_load=False):
                 unit]  
             found = True
         if not found:
-            logging.warning('No fuel price value has been found for fuel ' + Plants_merged['Fuel'][unit] + ' in unit ' + \
-                  Plants_merged['Unit'][unit] + '. A null variable cost has been assigned')
+            logging.warning('No fuel price value has been found for fuel ' + Plants_merged['Fuel'][unit] + ' in unit ' +
+                            Plants_merged['Unit'][unit] + '. A null variable cost has been assigned')
 
     # %%#################################################################################################################################################################################################
 

@@ -757,6 +757,11 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
         parameters['CostRampDown'] = {'sets': parameters['PowerCapacity']['sets'],
                                       'val': np.zeros(parameters['PowerCapacity']['val'].shape)}
 
+    # Set non-fuel variable costs(vom) to zero if not defined:
+    if not 'Vom' in parameters:
+        parameters['Vom'] = {'sets': parameters['PowerCapacity']['sets'],
+                             'val': np.zeros(parameters['PowerCapacity']['val'].shape)}
+
     # Initialize CostLoadShedding:
     parameters['CostLoadShedding'] = {'sets': ['n', 'h'],
                                       'val': 1000 * np.ones([len(sets['n']), Nhours])}
