@@ -498,7 +498,7 @@ def load_config_excel(ConfigFile):
     params = ['Demand', 'Outages', 'PowerPlantData', 'RenewablesAF', 'LoadShedding', 'NTC', 'Interconnections',
               'ReservoirScaledInflows', 'PriceOfNuclear', 'PriceOfBlackCoal', 'PriceOfGas', 'PriceOfFuelOil',
               'PriceOfBiomass', 'PriceOfCO2', 'ReservoirLevels', 'PriceOfLignite', 'PriceOfPeat','HeatDemand',
-              'CostHeatSlack','CostLoadShedding', 'MarkUps']
+              'CostHeatSlack','CostLoadShedding', 'MarkUps', 'MarkUpFactors']
     for i, param in enumerate(params):
         config[param] = sheet.cell_value(61 + i, 2)
 

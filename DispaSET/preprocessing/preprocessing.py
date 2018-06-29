@@ -165,6 +165,8 @@ def build_simulation(config, plot_load=False):
                                    default=config['default']['CostHeatSlack'])
     MarkUps = UnitBasedTable(plants, config['MarkUps'], idx_utc_noloc, config['countries'],
                              fallbacks=['Unit', 'Technology'], tablename='MarkUps', default=0)
+    MarkUpFactors = UnitBasedTable(plants, config['MarkUpFactors'], idx_utc_noloc, config['countries'],
+                             fallbacks=['Unit', 'Technology'], tablename='MarkUpFactors', default=1)
 
     # Data checks:
     check_AvailabilityFactors(plants, AF)
@@ -305,6 +307,7 @@ def build_simulation(config, plot_load=False):
     AF_merged = merge_series(plants, AF, mapping, tablename='AvailabilityFactors')
     CostHeatSlack_merged = merge_series(plants, CostHeatSlack, mapping, tablename='CostHeatSlack')
     MarkUps_merged = merge_series(plants, MarkUps, mapping, tablename='Markups')
+    MarkUpFactors_merged = merge_series(plants, MarkUpFactors, mapping, tablename='MarkUpFactors')
 
     # Checking data
     check_df(Load, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1], name='Load')
@@ -327,6 +330,7 @@ def build_simulation(config, plot_load=False):
     check_df(CostLoadShedding, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1],
              name='CostLoadShedding')
     check_df(MarkUps_merged, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1], name='MarkUps_merged')
+    check_df(MarkUpFactors_merged, StartDate=idx_utc_noloc[0], StopDate=idx_utc_noloc[-1], name='MarkUpFactors_merged')
 
     # Extending the data to include the look-ahead period (with constant values assumed)
     enddate_long = idx_utc_noloc[-1] + dt.timedelta(days=config['LookAhead'])
@@ -347,6 +351,8 @@ def build_simulation(config, plot_load=False):
     LoadShedding = LoadShedding.reindex(idx_long, method='nearest').fillna(method='bfill')
     CostLoadShedding = CostLoadShedding.reindex(idx_long, method='nearest').fillna(method='bfill')
     MarkUps_merged = MarkUps_merged.reindex(idx_long, method='nearest').fillna(method='bfill')
+    MarkUpFactors_merged = MarkUpFactors_merged.reindex(idx_long, method='nearest').fillna(method='bfill')
+
 #    for tr in Renewables:
 #        Renewables[tr] = Renewables[tr].reindex(idx_long, method='nearest').fillna(method='bfill')
 
@@ -432,6 +438,7 @@ def build_simulation(config, plot_load=False):
     sets_param['TimeDownInitial'] = ['u']
     sets_param['StorageFinalMin'] = ['s']
     sets_param['MarkUps'] = ['u', 'h']
+    sets_param['MarkUpFactors'] = ['u', 'h']
 
     # Define all the parameters and set a default value of zero:
     for var in sets_param:
@@ -542,6 +549,10 @@ def build_simulation(config, plot_load=False):
     for i, u in enumerate(sets['u']):
         parameters['MarkUps']['val'][i, :] = MarkUps_merged[u].values
 
+    # Mark-up factors:
+    for i, u in enumerate(sets['u']):
+        parameters['MarkUpFactors']['val'][i, :] = MarkUpFactors_merged[u].values
+
     # %%#################################################################################################################################################################################################
     # Variable Cost
     # Equivalence dictionary between fuel types and price entries in the config sheet:
@@ -564,6 +575,7 @@ def build_simulation(config, plot_load=False):
         if not found:
             logging.warning('No fuel price value has been found for fuel ' + Plants_merged['Fuel'][unit] + ' in unit ' +
                             Plants_merged['Unit'][unit] + '. A null variable cost has been assigned')
+        parameters['CostVariable']['val'][unit, :] *= parameters['MarkUpFactors']['val'][unit, :]
 
     # %%#################################################################################################################################################################################################
 
