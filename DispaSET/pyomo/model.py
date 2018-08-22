@@ -894,8 +894,8 @@ def DispaSolve(sets, parameters, LPFormulation=False, path_cplex = ''):
         results_sliced['LostLoad_Reserve2D'] = pyomo_to_pandas(opt, 'LostLoad_Reserve2D')
 
         results_sliced['Price_Energy_DA'] = pyomo_to_pandas(opt, 'EQ_Demand_balance_DA', dual=True)
-        results_sliced['Price_Energy_2U'] = pyomo_to_pandas(opt, 'EQ_Demand_balance_2U', dual=True)
-        results_sliced['Price_Energy_2D'] = pyomo_to_pandas(opt, 'EQ_Demand_balance_2D', dual=True)
+        results_sliced['Price_Reserve_2U'] = pyomo_to_pandas(opt, 'EQ_Demand_balance_2U', dual=True)
+        results_sliced['Price_Reserve_2D'] = pyomo_to_pandas(opt, 'EQ_Demand_balance_2D', dual=True)
 
         # Defining the main results dictionary:
         if len(results) == 0:
